@@ -91,12 +91,12 @@ def upload_to_index(index, embedding_set, batch_size=100):
         index.upsert(batch)
 
 
-dataset = create_dataset("dataset_1", documentation_path)
+dataset = create_dataset("dataset_2", documentation_path)
 print("Dataset created from documentation")
 embeddings = create_embedding_set(dataset)
 print("Embeddings created from dataset")
 pinecone_index = create_pinecone_index(
-    "literal-rag-index", pinecone_client, pinecone_spec
+    "chainlit-rag-index", pinecone_client, pinecone_spec
 )
 print("Pinecone index created")
 

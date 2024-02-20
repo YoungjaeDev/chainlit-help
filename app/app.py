@@ -21,7 +21,7 @@ def create_pinecone_index(name, client, spec):
 
 
 pinecone_index = create_pinecone_index(
-    "literal-rag-index", pinecone_client, pinecone_spec
+    "chainlit-rag-index", pinecone_client, pinecone_spec
 )
 
 
