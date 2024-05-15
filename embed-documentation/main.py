@@ -16,16 +16,19 @@ pinecone_spec = ServerlessSpec(
     cloud=os.environ.get("PINECONE_CLOUD"), region=os.environ.get("PINECONE_REGION")
 )
 
+
 def create_dataset(id, path):
     values = []
 
     for filename in os.listdir(path):
-        # Skip non mdx files
-        if not filename.endswith("mdx"):
-            continue
-
         with open(os.path.join(path, filename), "r") as file:
             file_content = file.read()
+ 
+        if filename.endswith("__init__.py"):
+            continue
+
+        if not filename.endswith("mdx") and not filename.endswith("md"):
+            values.append({"title": filename, "description": "Cookbook in Python", "content": file_content})
 
         # Extract file metadata
         metadata = re.search(
@@ -37,7 +40,7 @@ def create_dataset(id, path):
             continue
         file_title, file_description = metadata.groups()
 
-        # Strop newlines except for code blocks
+        # Strip newlines except for code blocks
         content = file_content.split("---", 2)[-1]
         content_parts = re.split(r"(```.*?```)", content, flags=re.DOTALL)
 
@@ -46,9 +49,7 @@ def create_dataset(id, path):
                 content_parts[i] = content_parts[i].replace("\n", " ")
         content = "".join(content_parts)
 
-        values.append(
-            {"title": file_title, "description": file_description, "content": content}
-        )
+        values.append({"title": file_title, "description": file_description, "content": content})
 
     return {"id": id, "values": values}
 
