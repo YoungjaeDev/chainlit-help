@@ -215,7 +215,7 @@ async def on_chat_start():
     if client_type != "discord":
         await cl.Avatar(name="Chainlit Help", path="./public/logo.png").send()
         await cl.Message(
-            content="Welcome, please ask me anything about the Chainlit documentation!",
+            content="Welcome, please ask me anything about Chainlit!",
             disable_feedback=True
         ).send()
 
