@@ -29,11 +29,11 @@ unsafe_allow_html = false
 latex = false
 
 # Authorize users to upload files with messages
-[features.multi_modal]
+[features.spontaneous_file_upload]
     enabled = true
-    accept = ["*/*"]
-    max_files = 20
-    max_size_mb = 500
+    accept = ["image/*"]
+    max_files = 3
+    max_size_mb = 100
 
 # Allows user to use speech to text
 [features.speech_to_text]
@@ -43,10 +43,10 @@ latex = false
 
 [UI]
 # Name of the app and chatbot.
-name = "Chatbot"
+name = "Chainlit Help"
 
 # Show the readme while the thread is empty.
-show_readme_as_default = true
+show_readme_as_default = false
 
 # Description of the app and chatbot. This is used for HTML tags.
 # description = ""
@@ -61,7 +61,7 @@ default_expand_messages = false
 hide_cot = false
 
 # Link to your github repo. This will add a github button in the UI's header.
-# github = ""
+github = "https://github.com/Chainlit/Documentation-RAG-application"
 
 # Specify a CSS file that can be used to customize the user interface.
 # The CSS file can be served from the public directory or via an external link.
