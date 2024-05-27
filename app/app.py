@@ -57,6 +57,33 @@ pinecone_index = create_pinecone_index(
 )
 
 
+@cl.set_starters
+async def set_starters():
+    return [
+        cl.Starter(
+            label="App Ideation",
+            message="What kind of application can I create with Chainlit?",
+            icon="/public/idea.svg",
+            ),
+
+        cl.Starter(
+            label="How do authentication work?",
+            message="Explain the different options for authenticating users in Chainlit.",
+            icon="/public/learn.svg",
+            ),
+        cl.Starter(
+            label="Chainlit hello world",
+            message="Write a Chainlit hello world app.",
+            icon="/public/terminal.svg",
+            ), 
+        cl.Starter(
+            label="Add a text element",
+            message="How to add a text source chunk to a message?",
+            icon="/public/write.svg",
+            )
+        ]
+
+
 @cl.step(name="Embed", type="embedding")
 async def embed(question, model="text-embedding-ada-002"):
     """
@@ -229,13 +256,6 @@ async def on_chat_start():
 
     client_type = cl.user_session.get("client_type")
 
-    if client_type != "discord":
-        await cl.Avatar(name="Chainlit Help", path="./public/logo.png").send()
-        await cl.Message(
-            content="Welcome, please ask me anything about Chainlit!",
-            disable_feedback=True
-        ).send()
-
     cl.user_session.set("messages", prompt.format_messages())
     cl.user_session.set("settings", prompt.settings)
     cl.user_session.set("tools", prompt.tools)
@@ -291,6 +311,5 @@ async def main(message: cl.Message):
     await use_discord_history()
     
     answer_message = cl.Message(content="")
-    await answer_message.send()
     cl.user_session.set("answer_message", answer_message)
     await rag_agent(message.content, images_content)
