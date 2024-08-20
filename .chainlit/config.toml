@@ -60,7 +60,7 @@ name = "Assistant"
 default_collapse_content = true
 
 # Hide the chain of thought details from the user in the UI.
-hide_cot = false
+cot = "tool_call"
 
 # Link to your github repo. This will add a github button in the UI's header.
 # github = ""

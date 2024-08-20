@@ -204,7 +204,7 @@ async def llm_answer(tool_results):
         stream_options={"include_usage": True},
     )
 
-    answer_message: cl.Message = cl.user_session.get("answer_message")
+    answer_message = cl.Message(content="")
 
     token_count = 0
     async for part in stream:
@@ -213,7 +213,7 @@ async def llm_answer(tool_results):
         elif token := part.choices[0].delta.content or "":
             await answer_message.stream_token(token)
 
-    await answer_message.update()
+    await answer_message.send()
     messages.append({"role": "assistant", "content": answer_message.content})
 
     if (
@@ -239,8 +239,7 @@ async def rag_agent(question, images_content):
 
     # Potentially several calls to retrieve context.
     if not message.tool_calls:
-        answer_message: cl.Message = cl.user_session.get("answer_message")
-        answer_message.content = message.content
+        answer_message = cl.Message(message.content)
         await answer_message.send()
         return message.content
 
@@ -322,7 +321,5 @@ async def main(message: cl.Message):
         ]
     # The user session resets on every Discord message. Add previous chat messages manually.
     await use_discord_history()
-
-    answer_message = cl.Message(content="")
-    cl.user_session.set("answer_message", answer_message)
-    return await rag_agent(message.content, images_content)
+   
+    await rag_agent(message.content, images_content)

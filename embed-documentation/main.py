@@ -64,7 +64,7 @@ def create_dataset(id, path):
     return {"id": id, "values": values}
 
 
-def create_embedding_set(dataset, model="text-embedding-3-small"):
+def create_embedding_set(dataset, model="text-embedding-ada-002"):
     values = []
 
     for item in dataset["values"]:
