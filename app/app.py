@@ -66,7 +66,7 @@ async def set_starters():
             icon="/public/idea.svg",
         ),
         cl.Starter(
-            label="How do authentication work?",
+            label="How does authentication work?",
             message="Explain the different options for authenticating users in Chainlit.",
             icon="/public/learn.svg",
         ),
@@ -321,5 +321,5 @@ async def main(message: cl.Message):
         ]
     # The user session resets on every Discord message. Add previous chat messages manually.
     await use_discord_history()
-   
+
     await rag_agent(message.content, images_content)
