@@ -84,7 +84,7 @@ async def set_starters():
 
 
 @cl.step(name="Embed", type="embedding")
-async def embed(question, model="text-embedding-ada-002"):
+async def embed(question, model="text-embedding-3-small"):
     """
     Embed a question using the specified model and return the embedding.
     """
