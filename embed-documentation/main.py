@@ -1,124 +1,88 @@
 import os
-import re
+import asyncio
 from dotenv import load_dotenv
-from openai import OpenAI
-from pinecone import Pinecone, ServerlessSpec
-
 load_dotenv()
+from openai import AsyncOpenAI
 
-documentation_path = os.path.join(os.getcwd(), "./documentation")
-cookbooks_path = os.path.join(os.getcwd(), "./cookbooks")
+client = AsyncOpenAI()
 
-openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+async def delete_all_files():
+    confirmation = input("This will delete all OpenAI files with purpose 'assistants'.\n Type 'YES' to confirm: ")
+    if confirmation == "YES":
+        response = await client.files.list(purpose="assistants")
+        for file in response.data:
+            await client.files.delete(file.id)
+        print("All files with purpose 'assistants' have been deleted.")
+    else:
+        print("Operation cancelled.")
 
-pinecone_client = Pinecone(api_key=os.environ.get("PINECONE_API_KEY"))
-pinecone_spec = ServerlessSpec(
-    cloud=os.environ.get("PINECONE_CLOUD"), region=os.environ.get("PINECONE_REGION")
-)
-
-
-def create_dataset(id, path):
-    values = []
-
-    for filename in os.listdir(path):
-        with open(os.path.join(path, filename), "r") as file:
-            file_content = file.read()
-
-        if filename.endswith("__init__.py"):
-            continue
-
-        if not filename.endswith("mdx") and not filename.endswith("md"):
-            values.append(
-                {
-                    "title": filename,
-                    "description": "Cookbook in Python",
-                    "content": file_content,
-                }
+async def create_file(file_path):
+    # Handle local file path
+    try:
+        with open(file_path, "rb") as file_content:
+            result = await client.files.create(
+                file=file_content,
+                purpose="assistants"
             )
-
-        # Extract file metadata
-        metadata = re.search(
-            r"---\n[tT]itle: (.+?)(?:\n[dD]escription: (.+?))?\n---",
-            file_content,
-            re.DOTALL,
-        )
-
-        # Skip if missing no metadata
-        if not metadata:
-            continue
-        file_title, file_description = metadata.groups()
-
-        # Strip newlines except for code blocks
-        content = file_content.split("---", 2)[-1]
-        content_parts = re.split(r"(```.*?```)", content, flags=re.DOTALL)
-
-        for i in range(len(content_parts)):
-            if not content_parts[i].startswith("```"):
-                content_parts[i] = content_parts[i].replace("\n", " ")
-        content = "".join(content_parts)
-
-        values.append(
-            {"title": file_title, "description": file_description, "content": content}
-        )
-
-    return {"id": id, "values": values}
-
-
-def create_embedding_set(dataset, model="text-embedding-3-small"):
-    values = []
-
-    for item in dataset["values"]:
-        input = f"title:{item['title']}_description:{item['description']}_content:{item['content']}"
-        response = (
-            openai_client.embeddings.create(input=input, model=model).data[0].embedding
-        )
-        values.append({"text": input, "values": response})
-
-    return {"id": dataset["id"], "values": values}
-
-
-def create_pinecone_index(name, client, spec):
-    if name in client.list_indexes().names():
-        client.delete_index(name)
-
-    client.create_index(name, dimension=1536, metric="cosine", spec=spec)
-    return pinecone_client.Index(name)
-
-
-def upload_to_index(index, embedding_set, batch_size=100):
-    values = embedding_set["values"]
-    total_values = len(values)
-
-    for i in range(0, total_values, batch_size):
-        batch = []
-
-        for j in range(i, min(i + batch_size, total_values)):
-            batch.append(
-                {
-                    "id": f"vector_{embedding_set['id']}_{j}",
-                    "values": values[j]["values"],
-                    "metadata": {
-                        "dataset_id": embedding_set["id"],
-                        "text": values[j]["text"],
-                    },
-                }
+            
+            file_id = result.id
+            print(f"✅ Uploaded {file_id} for {file_path}")
+            
+            vector_result = await client.vector_stores.files.create(
+                vector_store_id=os.environ.get("OPENAI_VECTOR_STORE_ID"),
+                file_id=file_id
             )
-        index.upsert(batch)
+            print(f"✅ Vectorized {vector_result.id} for {file_path}")
+            return file_id
+    except Exception as e:
+        print(f"❌ ERROR in create_file function: {type(e).__name__}: {str(e)}")
+        raise e
 
+async def process_directory(directory, semaphore):
+    tasks = []
+    for root, _, files in os.walk(directory):
+        for file in files:
+            file_path = os.path.join(root, file)
+            tasks.append(process_file(file_path, semaphore))
+    
+    return await asyncio.gather(*tasks)
 
-dataset_documentation = create_dataset("dataset_documentation", documentation_path)
-dataset_cookbooks = create_dataset("dataset_cookbooks", cookbooks_path)
-print("Datasets created from documentation & cookbooks")
+async def process_file(file_path, semaphore):
+    async with semaphore:
+        try:
+            print(f"Processing: {file_path}")
+            await create_file(file_path)
+            return f"Successfully processed {file_path}"
+        except Exception as e:
+            return f"Error processing {file_path}: {str(e)}"
 
-embeddings_documentation = create_embedding_set(dataset_documentation)
-embeddings_cookbooks = create_embedding_set(dataset_cookbooks)
-print("Embeddings created from datasets")
+async def main():
+    
+    await delete_all_files()
+    
+    # Create a semaphore to limit concurrent tasks to 10
+    semaphore = asyncio.Semaphore(10)
+    
+    # Process both directories
+    directories = ['cookbooks', 'documentation']
+    tasks = []
+    
+    for directory in directories:
+        if os.path.exists(directory):
+            print(f"Processing directory: {directory}")
+            tasks.append(process_directory(directory, semaphore))
+        else:
+            print(f"Directory not found: {directory}")
+    
+    # Wait for all tasks to complete
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Print summary
+    print("\nProcessing complete!")
+    for result in results:
+        if isinstance(result, Exception):
+            print(f"Error: {str(result)}")
 
-pinecone_index = create_pinecone_index(
-    "chainlit-rag-index", pinecone_client, pinecone_spec
-)
-print("Pinecone index created")
-
-upload_to_index(pinecone_index, embeddings_documentation)
-upload_to_index(pinecone_index, embeddings_cookbooks)
-print("Embeddings uploaded to index")
+# Run the main function
+if __name__ == "__main__":
+    asyncio.run(main())

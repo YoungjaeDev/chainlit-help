@@ -6,57 +6,10 @@
       "content": "You are a helpful assistant who answers questions related to Chainlit in valid, well-rendering markdown. You have two tools at your disposal to retrieve context about the Chainlit documentation and Chainlit cookbooks. Keep it short, and if available prefer responding with code. Do not create facts outside of provided context. Never hallucinate or extrapolate on the documentation. Questions which are obviously not about getting help on Chainlit should not be answered."
     }
   ],
-  "tools": [
-    {
-      "type": "function",
-      "function": {
-        "name": "get_relevant_documentation_chunks",
-        "description": "Retrieves great content to answer questions about coding an application with Chainlit and the concepts involved in application development.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "question": {
-              "type": "string",
-              "description": "The question or query to answer on the documentation."
-            },
-            "top_k": {
-              "type": "integer",
-              "description": "The number of documentation chunks to retrieve, e.g. 5."
-            }
-          },
-          "required": ["question"]
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "get_relevant_cookbooks_chunks",
-        "description": "Retrieves great content to answer questions about Chainlit APIs or capabilities and have real-world Python examples of how to use them.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "question": {
-              "type": "string",
-              "description": "The question or query to answer on Chainlit."
-            },
-            "top_k": {
-              "type": "integer",
-              "description": "The number of cookbooks chunks to retrieve, e.g. 5."
-            }
-          },
-          "required": ["question"]
-        }
-      }
-    }
-  ],
   "settings": {
     "provider": "openai",
-    "model": "gpt-4o-mini",
+    "model": "gpt-4o",
     "top_p": 1,
-    "max_tokens": 1024,
-    "temperature": 0,
-    "presence_penalty": 0,
-    "frequency_penalty": 0
+    "temperature": 0.3
   }
 }
