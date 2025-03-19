@@ -130,7 +130,7 @@ async def handle_tools_calls(tool_calls: list[ToolCallChunk]):
             custom_element = cl.CustomElement(name="ChainlitArtifact", props=args)
             await cl.Message(content="", elements=[custom_element]).send()
         else:
-            raise ValueError(f"Invalid tool call {tool_call["name"]}")
+            raise ValueError(f"Invalid tool call {tool_call['name']}")
         
     return ai_message, tool_messages
 
