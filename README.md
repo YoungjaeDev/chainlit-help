@@ -1,4 +1,4 @@
-# RAG Copilot
+# Chainlit Help
 
 The Chainlit copilot for the Chainlit [documentation](https://docs.chainlit.io/get-started/overview).
 
@@ -8,8 +8,6 @@ The Chainlit copilot for the Chainlit [documentation](https://docs.chainlit.io/g
 
 - `cp app/.env.example app/.env`
 - Obtain a Literal API key [here](https://docs.getliteral.ai/python-client/get-started/authentication#how-to-get-my-api-key)
-- Get an OpenAI API key [here](https://platform.openai.com/docs/quickstart/step-2-setup-your-api-key)
-- Find your Pinecone API key [here](https://docs.pinecone.io/docs/authentication#finding-your-pinecone-api-key)
 - `pip install -r app/requirements.txt`
 - `chainlit run app/app.py`
 
@@ -18,15 +16,19 @@ The Chainlit copilot for the Chainlit [documentation](https://docs.chainlit.io/g
 - Make sure the Chainlit application is running.
 - `python -m http.server 3004 --directory copilot`
 
-### Embed the documentation
+### Create context
 
-To upload the latest embeddings to Pinecone:
+#### Codebase context
 
-- `cp embed-documentation/.env.example embed-documentation/.env`
-- Get an OpenAI API key [here](https://platform.openai.com/docs/quickstart/step-2-setup-your-api-key)
-- Find your Pinecone API key [here](https://docs.pinecone.io/docs/authentication#finding-your-pinecone-api-key)
-- `pip install -r embed-documentation/requirements.txt`
-- `./embed-documentation/main.sh`
+Go to https://gitingest.com for repo `https://github.com/chainlit/chainlit` with exclude
+```
+.editorconfig, .eslintignore, .eslintrc, .npmrc, .prettierrc, *.json, *.lock, *.yaml, *.toml, *.md, *.js, .github, .husky, cypress, frontend, images, libs/copilot, */tests,README.md, **/__pycache__, **/*.spec.py, **/wavtools, **/.git, */__init__.py, backend, LICENSE, *.config.ts
+```
+to generate `codebase.txt`
+
+#### Documentation context
+
+Go to https://gitingest.com for repo `https://github.com/chainlit/docs` with exclude `*.json` to generate `documentation.txt`
 
 ## How to contribute?
 
