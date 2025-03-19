@@ -1,3 +1,4 @@
 langchain-google-genai>=2.1.0
+langchain
 chainlit>=2.4.2
 discord>=2.3.0
