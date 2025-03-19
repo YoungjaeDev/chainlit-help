@@ -1,0 +1,2441 @@
+Directory structure:
+└── chainlit-chainlit/
+    └── libs/
+        └── react-client/
+            └── src/
+                ├── context.ts
+                ├── index.ts
+                ├── state.ts
+                ├── useAudio.ts
+                ├── useChatData.ts
+                ├── useChatInteract.ts
+                ├── useChatMessages.ts
+                ├── useChatSession.ts
+                ├── useConfig.ts
+                ├── api/
+                │   ├── index.tsx
+                │   └── hooks/
+                │       ├── api.ts
+                │       └── auth/
+                │           ├── config.ts
+                │           ├── index.ts
+                │           ├── sessionManagement.ts
+                │           ├── state.ts
+                │           ├── types.ts
+                │           └── userManagement.ts
+                ├── types/
+                │   ├── action.ts
+                │   ├── audio.ts
+                │   ├── command.ts
+                │   ├── config.ts
+                │   ├── element.ts
+                │   ├── feedback.ts
+                │   ├── file.ts
+                │   ├── history.ts
+                │   ├── index.ts
+                │   ├── mcp.ts
+                │   ├── step.ts
+                │   ├── thread.ts
+                │   └── user.ts
+                └── utils/
+                    ├── group.ts
+                    └── message.ts
+
+================================================
+File: libs/react-client/src/context.ts
+================================================
+import { createContext } from 'react';
+
+import { ChainlitAPI } from './api';
+
+const defaultChainlitContext = undefined;
+
+const ChainlitContext = createContext<ChainlitAPI>(
+  new ChainlitAPI('http://localhost:8000', 'webapp')
+);
+
+export { ChainlitContext, defaultChainlitContext };
+
+
+
+================================================
+File: libs/react-client/src/index.ts
+================================================
+export * from './useChatData';
+export * from './useChatInteract';
+export * from './useChatMessages';
+export * from './useChatSession';
+export * from './useAudio';
+export * from './useConfig';
+export * from './api';
+export * from './types';
+export * from './context';
+export * from './state';
+export * from './utils/message';
+
+export { Socket } from 'socket.io-client';
+
+export { WavRenderer } from './wavtools/wav_renderer';
+
+
+
+================================================
+File: libs/react-client/src/state.ts
+================================================
+import { isEqual } from 'lodash';
+import { AtomEffect, DefaultValue, atom, selector } from 'recoil';
+import { Socket } from 'socket.io-client';
+import { v4 as uuidv4 } from 'uuid';
+
+import { ICommand } from './types/command';
+
+import {
+  IAction,
+  IAsk,
+  IAuthConfig,
+  ICallFn,
+  IChainlitConfig,
+  IMcp,
+  IMessageElement,
+  IStep,
+  ITasklistElement,
+  IUser,
+  ThreadHistory
+} from './types';
+import { groupByDate } from './utils/group';
+import { WavRecorder, WavStreamPlayer } from './wavtools';
+
+export interface ISession {
+  socket: Socket;
+  error?: boolean;
+}
+
+export const threadIdToResumeState = atom<string | undefined>({
+  key: 'ThreadIdToResume',
+  default: undefined
+});
+
+export const resumeThreadErrorState = atom<string | undefined>({
+  key: 'ResumeThreadErrorState',
+  default: undefined
+});
+
+export const chatProfileState = atom<string | undefined>({
+  key: 'ChatProfile',
+  default: undefined
+});
+
+const sessionIdAtom = atom<string>({
+  key: 'SessionId',
+  default: uuidv4()
+});
+
+export const sessionIdState = selector({
+  key: 'SessionIdSelector',
+  get: ({ get }) => get(sessionIdAtom),
+  set: ({ set }, newValue) =>
+    set(sessionIdAtom, newValue instanceof DefaultValue ? uuidv4() : newValue)
+});
+
+export const sessionState = atom<ISession | undefined>({
+  key: 'Session',
+  dangerouslyAllowMutability: true,
+  default: undefined
+});
+
+export const actionState = atom<IAction[]>({
+  key: 'Actions',
+  default: []
+});
+
+export const messagesState = atom<IStep[]>({
+  key: 'Messages',
+  dangerouslyAllowMutability: true,
+  default: []
+});
+
+export const commandsState = atom<ICommand[]>({
+  key: 'Commands',
+  default: []
+});
+
+export const tokenCountState = atom<number>({
+  key: 'TokenCount',
+  default: 0
+});
+
+export const loadingState = atom<boolean>({
+  key: 'Loading',
+  default: false
+});
+
+export const askUserState = atom<IAsk | undefined>({
+  key: 'AskUser',
+  default: undefined
+});
+
+export const wavRecorderState = atom({
+  key: 'WavRecorder',
+  dangerouslyAllowMutability: true,
+  default: new WavRecorder()
+});
+
+export const wavStreamPlayerState = atom({
+  key: 'WavStreamPlayer',
+  dangerouslyAllowMutability: true,
+  default: new WavStreamPlayer()
+});
+
+export const audioConnectionState = atom<'connecting' | 'on' | 'off'>({
+  key: 'AudioConnection',
+  default: 'off'
+});
+
+export const isAiSpeakingState = atom({
+  key: 'isAiSpeaking',
+  default: false
+});
+
+export const callFnState = atom<ICallFn | undefined>({
+  key: 'CallFn',
+  default: undefined
+});
+
+export const chatSettingsInputsState = atom<any>({
+  key: 'ChatSettings',
+  default: []
+});
+
+export const chatSettingsDefaultValueSelector = selector({
+  key: 'ChatSettingsValue/Default',
+  get: ({ get }) => {
+    const chatSettings = get(chatSettingsInputsState);
+    return chatSettings.reduce(
+      (form: { [key: string]: any }, input: any) => (
+        (form[input.id] = input.initial), form
+      ),
+      {}
+    );
+  }
+});
+
+export const chatSettingsValueState = atom({
+  key: 'ChatSettingsValue',
+  default: chatSettingsDefaultValueSelector
+});
+
+export const elementState = atom<IMessageElement[]>({
+  key: 'DisplayElements',
+  default: []
+});
+
+export const tasklistState = atom<ITasklistElement[]>({
+  key: 'TasklistElements',
+  default: []
+});
+
+export const firstUserInteraction = atom<string | undefined>({
+  key: 'FirstUserInteraction',
+  default: undefined
+});
+
+export const userState = atom<IUser | undefined | null>({
+  key: 'User',
+  default: undefined
+});
+
+export const configState = atom<IChainlitConfig | undefined>({
+  key: 'ChainlitConfig',
+  default: undefined
+});
+
+export const authState = atom<IAuthConfig | undefined>({
+  key: 'AuthConfig',
+  default: undefined
+});
+
+export const threadHistoryState = atom<ThreadHistory | undefined>({
+  key: 'ThreadHistory',
+  default: {
+    threads: undefined,
+    currentThreadId: undefined,
+    timeGroupedThreads: undefined,
+    pageInfo: undefined
+  },
+  effects: [
+    ({ setSelf, onSet }: { setSelf: any; onSet: any }) => {
+      onSet(
+        (
+          newValue: ThreadHistory | undefined,
+          oldValue: ThreadHistory | undefined
+        ) => {
+          let timeGroupedThreads = newValue?.timeGroupedThreads;
+          if (
+            newValue?.threads &&
+            !isEqual(newValue.threads, oldValue?.timeGroupedThreads)
+          ) {
+            timeGroupedThreads = groupByDate(newValue.threads);
+          }
+
+          setSelf({
+            ...newValue,
+            timeGroupedThreads
+          });
+        }
+      );
+    }
+  ]
+});
+
+export const sideViewState = atom<
+  { title: string; elements: IMessageElement[] } | undefined
+>({
+  key: 'SideView',
+  default: undefined
+});
+
+export const currentThreadIdState = atom<string | undefined>({
+  key: 'CurrentThreadId',
+  default: undefined
+});
+
+const localStorageEffect =
+  <T>(key: string): AtomEffect<T> =>
+  ({ setSelf, onSet }) => {
+    // When the atom is first initialized, try to get its value from localStorage
+    const savedValue = localStorage.getItem(key);
+    if (savedValue != null) {
+      try {
+        setSelf(JSON.parse(savedValue));
+      } catch (error) {
+        console.error(
+          `Error parsing localStorage value for key "${key}":`,
+          error
+        );
+      }
+    }
+
+    // Subscribe to state changes and update localStorage
+    onSet((newValue, _, isReset) => {
+      if (isReset) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, JSON.stringify(newValue));
+      }
+    });
+  };
+
+export const mcpState = atom<IMcp[]>({
+  key: 'Mcp',
+  default: [],
+  effects: [localStorageEffect<IMcp[]>('mcp_storage_key')]
+});
+
+
+
+================================================
+File: libs/react-client/src/useAudio.ts
+================================================
+import { useCallback } from 'react';
+import { useRecoilState, useRecoilValue } from 'recoil';
+
+import {
+  audioConnectionState,
+  isAiSpeakingState,
+  wavRecorderState,
+  wavStreamPlayerState
+} from './state';
+import { useChatInteract } from './useChatInteract';
+
+const useAudio = () => {
+  const [audioConnection, setAudioConnection] =
+    useRecoilState(audioConnectionState);
+  const wavRecorder = useRecoilValue(wavRecorderState);
+  const wavStreamPlayer = useRecoilValue(wavStreamPlayerState);
+  const isAiSpeaking = useRecoilValue(isAiSpeakingState);
+
+  const { startAudioStream, endAudioStream } = useChatInteract();
+
+  const startConversation = useCallback(async () => {
+    setAudioConnection('connecting');
+    await startAudioStream();
+  }, [startAudioStream]);
+
+  const endConversation = useCallback(async () => {
+    setAudioConnection('off');
+    await wavRecorder.end();
+    await wavStreamPlayer.interrupt();
+    await endAudioStream();
+  }, [endAudioStream, wavRecorder, wavStreamPlayer]);
+
+  return {
+    startConversation,
+    endConversation,
+    audioConnection,
+    isAiSpeaking,
+    wavRecorder,
+    wavStreamPlayer
+  };
+};
+
+export { useAudio };
+
+
+
+================================================
+File: libs/react-client/src/useChatData.ts
+================================================
+import { useRecoilValue } from 'recoil';
+
+import {
+  actionState,
+  askUserState,
+  callFnState,
+  chatSettingsDefaultValueSelector,
+  chatSettingsInputsState,
+  chatSettingsValueState,
+  elementState,
+  loadingState,
+  sessionState,
+  tasklistState
+} from './state';
+
+export interface IToken {
+  id: number | string;
+  token: string;
+  isSequence: boolean;
+  isInput: boolean;
+}
+
+const useChatData = () => {
+  const loading = useRecoilValue(loadingState);
+  const elements = useRecoilValue(elementState);
+  const tasklists = useRecoilValue(tasklistState);
+  const actions = useRecoilValue(actionState);
+  const session = useRecoilValue(sessionState);
+  const askUser = useRecoilValue(askUserState);
+  const callFn = useRecoilValue(callFnState);
+  const chatSettingsInputs = useRecoilValue(chatSettingsInputsState);
+  const chatSettingsValue = useRecoilValue(chatSettingsValueState);
+  const chatSettingsDefaultValue = useRecoilValue(
+    chatSettingsDefaultValueSelector
+  );
+
+  const connected = session?.socket.connected && !session?.error;
+  const disabled =
+    !connected ||
+    loading ||
+    askUser?.spec.type === 'file' ||
+    askUser?.spec.type === 'action';
+
+  return {
+    actions,
+    askUser,
+    callFn,
+    chatSettingsDefaultValue,
+    chatSettingsInputs,
+    chatSettingsValue,
+    connected,
+    disabled,
+    elements,
+    error: session?.error,
+    loading,
+    tasklists
+  };
+};
+
+export { useChatData };
+
+
+
+================================================
+File: libs/react-client/src/useChatInteract.ts
+================================================
+import { useCallback, useContext } from 'react';
+import { useRecoilValue, useResetRecoilState, useSetRecoilState } from 'recoil';
+import {
+  actionState,
+  askUserState,
+  chatSettingsInputsState,
+  chatSettingsValueState,
+  currentThreadIdState,
+  elementState,
+  firstUserInteraction,
+  loadingState,
+  messagesState,
+  sessionIdState,
+  sessionState,
+  sideViewState,
+  tasklistState,
+  threadIdToResumeState,
+  tokenCountState
+} from 'src/state';
+import { IFileRef, IStep } from 'src/types';
+import { addMessage } from 'src/utils/message';
+import { v4 as uuidv4 } from 'uuid';
+
+import { ChainlitContext } from './context';
+
+type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+
+const useChatInteract = () => {
+  const client = useContext(ChainlitContext);
+  const session = useRecoilValue(sessionState);
+  const askUser = useRecoilValue(askUserState);
+  const sessionId = useRecoilValue(sessionIdState);
+
+  const resetChatSettings = useResetRecoilState(chatSettingsInputsState);
+  const resetSessionId = useResetRecoilState(sessionIdState);
+  const resetChatSettingsValue = useResetRecoilState(chatSettingsValueState);
+
+  const setFirstUserInteraction = useSetRecoilState(firstUserInteraction);
+  const setLoading = useSetRecoilState(loadingState);
+  const setMessages = useSetRecoilState(messagesState);
+  const setElements = useSetRecoilState(elementState);
+  const setTasklists = useSetRecoilState(tasklistState);
+  const setActions = useSetRecoilState(actionState);
+  const setTokenCount = useSetRecoilState(tokenCountState);
+  const setIdToResume = useSetRecoilState(threadIdToResumeState);
+  const setSideView = useSetRecoilState(sideViewState);
+  const setCurrentThreadId = useSetRecoilState(currentThreadIdState);
+
+  const clear = useCallback(() => {
+    session?.socket.emit('clear_session');
+    session?.socket.disconnect();
+    setIdToResume(undefined);
+    resetSessionId();
+    setFirstUserInteraction(undefined);
+    setMessages([]);
+    setElements([]);
+    setTasklists([]);
+    setActions([]);
+    setTokenCount(0);
+    resetChatSettings();
+    resetChatSettingsValue();
+    setSideView(undefined);
+    setCurrentThreadId(undefined);
+  }, [session]);
+
+  const sendMessage = useCallback(
+    (
+      message: PartialBy<IStep, 'createdAt' | 'id'>,
+      fileReferences: IFileRef[] = []
+    ) => {
+      if (!message.id) {
+        message.id = uuidv4();
+      }
+      if (!message.createdAt) {
+        message.createdAt = new Date().toISOString();
+      }
+      setMessages((oldMessages) => addMessage(oldMessages, message as IStep));
+
+      session?.socket.emit('client_message', { message, fileReferences });
+    },
+    [session?.socket]
+  );
+
+  const editMessage = useCallback(
+    (message: IStep) => {
+      session?.socket.emit('edit_message', { message });
+    },
+    [session?.socket]
+  );
+
+  const windowMessage = useCallback(
+    (data: any) => {
+      session?.socket.emit('window_message', data);
+    },
+    [session?.socket]
+  );
+
+  const startAudioStream = useCallback(() => {
+    session?.socket.emit('audio_start');
+  }, [session?.socket]);
+
+  const sendAudioChunk = useCallback(
+    (
+      isStart: boolean,
+      mimeType: string,
+      elapsedTime: number,
+      data: Int16Array
+    ) => {
+      session?.socket.emit('audio_chunk', {
+        isStart,
+        mimeType,
+        elapsedTime,
+        data
+      });
+    },
+    [session?.socket]
+  );
+
+  const endAudioStream = useCallback(() => {
+    session?.socket.emit('audio_end');
+  }, [session?.socket]);
+
+  const replyMessage = useCallback(
+    (message: IStep) => {
+      if (askUser) {
+        if (askUser.parentId) message.parentId = askUser.parentId;
+        setMessages((oldMessages) => addMessage(oldMessages, message));
+        askUser.callback(message);
+      }
+    },
+    [askUser]
+  );
+
+  const updateChatSettings = useCallback(
+    (values: object) => {
+      session?.socket.emit('chat_settings_change', values);
+    },
+    [session?.socket]
+  );
+
+  const stopTask = useCallback(() => {
+    setMessages((oldMessages) =>
+      oldMessages.map((m) => {
+        m.streaming = false;
+        return m;
+      })
+    );
+
+    setLoading(false);
+
+    session?.socket.emit('stop');
+  }, [session?.socket]);
+
+  const uploadFile = useCallback(
+    (file: File, onProgress: (progress: number) => void) => {
+      return client.uploadFile(file, onProgress, sessionId);
+    },
+    [sessionId]
+  );
+
+  return {
+    uploadFile,
+    clear,
+    replyMessage,
+    sendMessage,
+    editMessage,
+    windowMessage,
+    startAudioStream,
+    sendAudioChunk,
+    endAudioStream,
+    stopTask,
+    setIdToResume,
+    updateChatSettings
+  };
+};
+
+export { useChatInteract };
+
+
+
+================================================
+File: libs/react-client/src/useChatMessages.ts
+================================================
+import { useRecoilValue } from 'recoil';
+
+import {
+  currentThreadIdState,
+  firstUserInteraction,
+  messagesState
+} from './state';
+
+const useChatMessages = () => {
+  const messages = useRecoilValue(messagesState);
+  const firstInteraction = useRecoilValue(firstUserInteraction);
+  const threadId = useRecoilValue(currentThreadIdState);
+
+  return {
+    threadId,
+    messages,
+    firstInteraction
+  };
+};
+
+export { useChatMessages };
+
+
+
+================================================
+File: libs/react-client/src/useChatSession.ts
+================================================
+import { debounce } from 'lodash';
+import { useCallback, useContext, useEffect } from 'react';
+import {
+  useRecoilState,
+  useRecoilValue,
+  useResetRecoilState,
+  useSetRecoilState
+} from 'recoil';
+import io from 'socket.io-client';
+import { toast } from 'sonner';
+import {
+  actionState,
+  askUserState,
+  audioConnectionState,
+  callFnState,
+  chatProfileState,
+  chatSettingsInputsState,
+  chatSettingsValueState,
+  commandsState,
+  currentThreadIdState,
+  elementState,
+  firstUserInteraction,
+  isAiSpeakingState,
+  loadingState,
+  mcpState,
+  messagesState,
+  resumeThreadErrorState,
+  sessionIdState,
+  sessionState,
+  sideViewState,
+  tasklistState,
+  threadIdToResumeState,
+  tokenCountState,
+  wavRecorderState,
+  wavStreamPlayerState
+} from 'src/state';
+import {
+  IAction,
+  ICommand,
+  IElement,
+  IMessageElement,
+  IStep,
+  ITasklistElement,
+  IThread
+} from 'src/types';
+import {
+  addMessage,
+  deleteMessageById,
+  updateMessageById,
+  updateMessageContentById
+} from 'src/utils/message';
+
+import { OutputAudioChunk } from './types/audio';
+
+import { ChainlitContext } from './context';
+import type { IToken } from './useChatData';
+
+const useChatSession = () => {
+  const client = useContext(ChainlitContext);
+  const sessionId = useRecoilValue(sessionIdState);
+
+  const [session, setSession] = useRecoilState(sessionState);
+  const setIsAiSpeaking = useSetRecoilState(isAiSpeakingState);
+  const setAudioConnection = useSetRecoilState(audioConnectionState);
+  const resetChatSettingsValue = useResetRecoilState(chatSettingsValueState);
+  const setChatSettingsValue = useSetRecoilState(chatSettingsValueState);
+  const setFirstUserInteraction = useSetRecoilState(firstUserInteraction);
+  const setLoading = useSetRecoilState(loadingState);
+  const setMcps = useSetRecoilState(mcpState);
+  const wavStreamPlayer = useRecoilValue(wavStreamPlayerState);
+  const wavRecorder = useRecoilValue(wavRecorderState);
+  const setMessages = useSetRecoilState(messagesState);
+  const setAskUser = useSetRecoilState(askUserState);
+  const setCallFn = useSetRecoilState(callFnState);
+  const setCommands = useSetRecoilState(commandsState);
+  const setSideView = useSetRecoilState(sideViewState);
+  const setElements = useSetRecoilState(elementState);
+  const setTasklists = useSetRecoilState(tasklistState);
+  const setActions = useSetRecoilState(actionState);
+  const setChatSettingsInputs = useSetRecoilState(chatSettingsInputsState);
+  const setTokenCount = useSetRecoilState(tokenCountState);
+  const [chatProfile, setChatProfile] = useRecoilState(chatProfileState);
+  const idToResume = useRecoilValue(threadIdToResumeState);
+  const setThreadResumeError = useSetRecoilState(resumeThreadErrorState);
+
+  const [currentThreadId, setCurrentThreadId] =
+    useRecoilState(currentThreadIdState);
+
+  // Use currentThreadId as thread id in websocket header
+  useEffect(() => {
+    if (session?.socket) {
+      session.socket.auth['threadId'] = currentThreadId || '';
+    }
+  }, [currentThreadId]);
+
+  const _connect = useCallback(
+    ({
+      transports,
+      userEnv
+    }: {
+      transports?: string[];
+      userEnv: Record<string, string>;
+    }) => {
+      const { protocol, host, pathname } = new URL(client.httpEndpoint);
+      const uri = `${protocol}//${host}`;
+      const path =
+        pathname && pathname !== '/'
+          ? `${pathname}/ws/socket.io`
+          : '/ws/socket.io';
+
+      const socket = io(uri, {
+        path,
+        withCredentials: true,
+        transports,
+        auth: {
+          clientType: client.type,
+          sessionId,
+          threadId: idToResume || '',
+          userEnv: JSON.stringify(userEnv),
+          chatProfile: chatProfile ? encodeURIComponent(chatProfile) : ''
+        }
+      });
+      setSession((old) => {
+        old?.socket?.removeAllListeners();
+        old?.socket?.close();
+        return {
+          socket
+        };
+      });
+
+      socket.on('connect', () => {
+        socket.emit('connection_successful');
+        setSession((s) => ({ ...s!, error: false }));
+        setMcps((prev) =>
+          prev.map((mcp) => {
+            const promise =
+              mcp.clientType === 'sse'
+                ? client.connectSseMCP(sessionId, mcp.name, mcp.url!)
+                : client.connectStdioMCP(sessionId, mcp.name, mcp.command!);
+            promise
+              .then(async ({ success, mcp }) => {
+                setMcps((prev) =>
+                  prev.map((existingMcp) => {
+                    if (existingMcp.name === mcp.name) {
+                      return {
+                        ...existingMcp,
+                        status: success ? 'connected' : 'failed',
+                        tools: mcp ? mcp.tools : existingMcp.tools
+                      };
+                    }
+                    return existingMcp;
+                  })
+                );
+              })
+              .catch(() => {
+                setMcps((prev) =>
+                  prev.map((existingMcp) => {
+                    if (existingMcp.name === mcp.name) {
+                      return {
+                        ...existingMcp,
+                        status: 'failed'
+                      };
+                    }
+                    return existingMcp;
+                  })
+                );
+              });
+            return { ...mcp, status: 'connecting' };
+          })
+        );
+      });
+
+      socket.on('connect_error', (_) => {
+        setSession((s) => ({ ...s!, error: true }));
+      });
+
+      socket.on('task_start', () => {
+        setLoading(true);
+      });
+
+      socket.on('task_end', () => {
+        setLoading(false);
+      });
+
+      socket.on('reload', () => {
+        socket.emit('clear_session');
+        window.location.reload();
+      });
+
+      socket.on('audio_connection', async (state: 'on' | 'off') => {
+        if (state === 'on') {
+          let isFirstChunk = true;
+          const startTime = Date.now();
+          const mimeType = 'pcm16';
+          // Connect to microphone
+          await wavRecorder.begin();
+          await wavStreamPlayer.connect();
+          await wavRecorder.record(async (data) => {
+            const elapsedTime = Date.now() - startTime;
+            socket.emit('audio_chunk', {
+              isStart: isFirstChunk,
+              mimeType,
+              elapsedTime,
+              data: data.mono
+            });
+            isFirstChunk = false;
+          });
+          wavStreamPlayer.onStop = () => setIsAiSpeaking(false);
+        } else {
+          await wavRecorder.end();
+          await wavStreamPlayer.interrupt();
+        }
+        setAudioConnection(state);
+      });
+
+      socket.on('audio_chunk', (chunk: OutputAudioChunk) => {
+        wavStreamPlayer.add16BitPCM(chunk.data, chunk.track);
+        setIsAiSpeaking(true);
+      });
+
+      socket.on('audio_interrupt', () => {
+        wavStreamPlayer.interrupt();
+      });
+
+      socket.on('resume_thread', (thread: IThread) => {
+        let messages: IStep[] = [];
+        for (const step of thread.steps) {
+          messages = addMessage(messages, step);
+        }
+        if (thread.metadata?.chat_profile) {
+          setChatProfile(thread.metadata?.chat_profile);
+        }
+        if (thread.metadata?.chat_settings) {
+          setChatSettingsValue(thread.metadata?.chat_settings);
+        }
+        setMessages(messages);
+        const elements = thread.elements || [];
+        setTasklists(
+          (elements as ITasklistElement[]).filter((e) => e.type === 'tasklist')
+        );
+        setElements(
+          (elements as IMessageElement[]).filter(
+            (e) => ['avatar', 'tasklist'].indexOf(e.type) === -1
+          )
+        );
+      });
+
+      socket.on('resume_thread_error', (error?: string) => {
+        setThreadResumeError(error);
+      });
+
+      socket.on('new_message', (message: IStep) => {
+        setMessages((oldMessages) => addMessage(oldMessages, message));
+      });
+
+      socket.on(
+        'first_interaction',
+        (event: { interaction: string; thread_id: string }) => {
+          setFirstUserInteraction(event.interaction);
+          setCurrentThreadId(event.thread_id);
+        }
+      );
+
+      socket.on('update_message', (message: IStep) => {
+        setMessages((oldMessages) =>
+          updateMessageById(oldMessages, message.id, message)
+        );
+      });
+
+      socket.on('delete_message', (message: IStep) => {
+        setMessages((oldMessages) =>
+          deleteMessageById(oldMessages, message.id)
+        );
+      });
+
+      socket.on('stream_start', (message: IStep) => {
+        setMessages((oldMessages) => addMessage(oldMessages, message));
+      });
+
+      socket.on(
+        'stream_token',
+        ({ id, token, isSequence, isInput }: IToken) => {
+          setMessages((oldMessages) =>
+            updateMessageContentById(
+              oldMessages,
+              id,
+              token,
+              isSequence,
+              isInput
+            )
+          );
+        }
+      );
+
+      socket.on('ask', ({ msg, spec }, callback) => {
+        setAskUser({ spec, callback, parentId: msg.parentId });
+        setMessages((oldMessages) => addMessage(oldMessages, msg));
+
+        setLoading(false);
+      });
+
+      socket.on('ask_timeout', () => {
+        setAskUser(undefined);
+        setLoading(false);
+      });
+
+      socket.on('clear_ask', () => {
+        setAskUser(undefined);
+      });
+
+      socket.on('call_fn', ({ name, args }, callback) => {
+        setCallFn({ name, args, callback });
+      });
+
+      socket.on('clear_call_fn', () => {
+        setCallFn(undefined);
+      });
+
+      socket.on('call_fn_timeout', () => {
+        setCallFn(undefined);
+      });
+
+      socket.on('chat_settings', (inputs: any) => {
+        setChatSettingsInputs(inputs);
+        resetChatSettingsValue();
+      });
+
+      socket.on('set_commands', (commands: ICommand[]) => {
+        setCommands(commands);
+      });
+
+      socket.on('set_sidebar_title', (title: string) => {
+        setSideView((prev) => {
+          return { title, elements: prev?.elements || [] };
+        });
+      });
+
+      socket.on('set_sidebar_elements', (elements: IMessageElement[]) => {
+        if (!elements.length) {
+          setSideView(undefined);
+        } else {
+          elements.forEach((element) => {
+            if (!element.url && element.chainlitKey) {
+              element.url = client.getElementUrl(
+                element.chainlitKey,
+                sessionId
+              );
+            }
+          });
+          setSideView((prev) => {
+            return { title: prev?.title || '', elements: elements };
+          });
+        }
+      });
+
+      socket.on('element', (element: IElement) => {
+        if (!element.url && element.chainlitKey) {
+          element.url = client.getElementUrl(element.chainlitKey, sessionId);
+        }
+
+        if (element.type === 'tasklist') {
+          setTasklists((old) => {
+            const index = old.findIndex((e) => e.id === element.id);
+            if (index === -1) {
+              return [...old, element];
+            } else {
+              return [...old.slice(0, index), element, ...old.slice(index + 1)];
+            }
+          });
+        } else {
+          setElements((old) => {
+            const index = old.findIndex((e) => e.id === element.id);
+            if (index === -1) {
+              return [...old, element];
+            } else {
+              return [...old.slice(0, index), element, ...old.slice(index + 1)];
+            }
+          });
+        }
+      });
+
+      socket.on('remove_element', (remove: { id: string }) => {
+        setElements((old) => {
+          return old.filter((e) => e.id !== remove.id);
+        });
+        setTasklists((old) => {
+          return old.filter((e) => e.id !== remove.id);
+        });
+      });
+
+      socket.on('action', (action: IAction) => {
+        setActions((old) => [...old, action]);
+      });
+
+      socket.on('remove_action', (action: IAction) => {
+        setActions((old) => {
+          const index = old.findIndex((a) => a.id === action.id);
+          if (index === -1) return old;
+          return [...old.slice(0, index), ...old.slice(index + 1)];
+        });
+      });
+
+      socket.on('token_usage', (count: number) => {
+        setTokenCount((old) => old + count);
+      });
+
+      socket.on('window_message', (data: any) => {
+        if (window.parent) {
+          window.parent.postMessage(data, '*');
+        }
+      });
+
+      socket.on('toast', (data: { message: string; type: string }) => {
+        if (!data.message) {
+          console.warn('No message received for toast.');
+          return;
+        }
+
+        switch (data.type) {
+          case 'info':
+            toast.info(data.message);
+            break;
+          case 'error':
+            toast.error(data.message);
+            break;
+          case 'success':
+            toast.success(data.message);
+            break;
+          case 'warning':
+            toast.warning(data.message);
+            break;
+          default:
+            toast(data.message);
+            break;
+        }
+      });
+    },
+    [setSession, sessionId, idToResume, chatProfile]
+  );
+
+  const connect = useCallback(debounce(_connect, 200), [_connect]);
+
+  const disconnect = useCallback(() => {
+    if (session?.socket) {
+      session.socket.removeAllListeners();
+      session.socket.close();
+    }
+  }, [session]);
+
+  return {
+    connect,
+    disconnect,
+    session,
+    sessionId,
+    chatProfile,
+    idToResume,
+    setChatProfile
+  };
+};
+
+export { useChatSession };
+
+
+
+================================================
+File: libs/react-client/src/useConfig.ts
+================================================
+import { useEffect } from 'react';
+import { useRecoilState } from 'recoil';
+
+import { useApi, useAuth } from './api';
+import { configState } from './state';
+import { IChainlitConfig } from './types';
+
+const useConfig = () => {
+  const [config, setConfig] = useRecoilState(configState);
+  const { isAuthenticated } = useAuth();
+  const language = navigator.language || 'en-US';
+
+  const { data, error, isLoading } = useApi<IChainlitConfig>(
+    !config && isAuthenticated ? `/project/settings?language=${language}` : null
+  );
+
+  useEffect(() => {
+    if (!data) return;
+    setConfig(data);
+  }, [data, setConfig]);
+
+  return { config, error, isLoading, language };
+};
+
+export { useConfig };
+
+
+
+================================================
+File: libs/react-client/src/api/index.tsx
+================================================
+import { IElement, IThread, IUser } from 'src/types';
+
+import { IAction } from 'src/types/action';
+import { IFeedback } from 'src/types/feedback';
+
+export * from './hooks/auth';
+export * from './hooks/api';
+
+export interface IThreadFilters {
+  search?: string;
+  feedback?: number;
+}
+
+export interface IPageInfo {
+  hasNextPage: boolean;
+  endCursor?: string;
+}
+
+export interface IPagination {
+  first: number;
+  cursor?: string | number;
+}
+
+export class ClientError extends Error {
+  status: number;
+  detail?: string;
+
+  constructor(message: string, status: number, detail?: string) {
+    super(message);
+    this.status = status;
+    this.detail = detail;
+  }
+
+  toString() {
+    if (this.detail) {
+      return `${this.message}: ${this.detail}`;
+    } else {
+      return this.message;
+    }
+  }
+}
+
+type Payload = FormData | any;
+
+export class APIBase {
+  constructor(
+    public httpEndpoint: string,
+    public type: 'webapp' | 'copilot' | 'teams' | 'slack' | 'discord',
+    public on401?: () => void,
+    public onError?: (error: ClientError) => void
+  ) {}
+
+  buildEndpoint(path: string) {
+    if (this.httpEndpoint.endsWith('/')) {
+      // remove trailing slash on httpEndpoint
+      return `${this.httpEndpoint.slice(0, -1)}${path}`;
+    } else {
+      return `${this.httpEndpoint}${path}`;
+    }
+  }
+
+  private async getDetailFromErrorResponse(
+    res: Response
+  ): Promise<string | undefined> {
+    try {
+      const body = await res.json();
+      return body?.detail;
+    } catch (error: any) {
+      console.error('Unable to parse error response', error);
+    }
+    return undefined;
+  }
+
+  private handleRequestError(error: any) {
+    if (error instanceof ClientError) {
+      if (error.status === 401 && this.on401) {
+        this.on401();
+      }
+      if (this.onError) {
+        this.onError(error);
+      }
+    }
+    console.error(error);
+  }
+
+  /**
+   * Low-level HTTP request handler for direct API interactions.
+   * Provides full control over HTTP methods, request configuration, and error handling.
+   *
+   * Key features:
+   * - Supports all HTTP methods (GET, POST, PUT, PATCH, DELETE)
+   * - Handles both FormData and JSON payloads
+   * - Manages authentication headers
+   * - Custom error handling with ClientError class
+   * - Support for request cancellation via AbortSignal
+   *
+   * @param method - HTTP method to use (GET, POST, etc.)
+   * @param path - API endpoint path
+   * @param data - Optional request payload (FormData or JSON-serializable data)
+   * @param signal - Optional AbortSignal for request cancellation
+   * @returns Promise<Response>
+   * @throws ClientError for HTTP errors, including 401 unauthorized
+   */
+  async fetch(
+    method: string,
+    path: string,
+    data?: Payload,
+    signal?: AbortSignal,
+    headers: { Authorization?: string; 'Content-Type'?: string } = {}
+  ): Promise<Response> {
+    try {
+      let body;
+
+      if (data instanceof FormData) {
+        body = data;
+      } else {
+        headers['Content-Type'] = 'application/json';
+        body = data ? JSON.stringify(data) : null;
+      }
+
+      const res = await fetch(this.buildEndpoint(path), {
+        method,
+        credentials: 'include',
+        headers,
+        signal,
+        body
+      });
+
+      if (!res.ok) {
+        const detail = await this.getDetailFromErrorResponse(res);
+
+        throw new ClientError(res.statusText, res.status, detail);
+      }
+
+      return res;
+    } catch (error: any) {
+      this.handleRequestError(error);
+      throw error;
+    }
+  }
+
+  async get(endpoint: string) {
+    return await this.fetch('GET', endpoint);
+  }
+
+  async post(endpoint: string, data: Payload, signal?: AbortSignal) {
+    return await this.fetch('POST', endpoint, data, signal);
+  }
+
+  async put(endpoint: string, data: Payload) {
+    return await this.fetch('PUT', endpoint, data);
+  }
+
+  async patch(endpoint: string, data: Payload) {
+    return await this.fetch('PATCH', endpoint, data);
+  }
+
+  async delete(endpoint: string, data: Payload) {
+    return await this.fetch('DELETE', endpoint, data);
+  }
+}
+
+export class ChainlitAPI extends APIBase {
+  async headerAuth() {
+    const res = await this.post(`/auth/header`, {});
+    return res.json();
+  }
+
+  async jwtAuth(token: string) {
+    const res = await this.fetch('POST', '/auth/jwt', undefined, undefined, {
+      Authorization: `Bearer ${token}`
+    });
+    return res.json();
+  }
+
+  async passwordAuth(data: FormData) {
+    const res = await this.post(`/login`, data);
+    return res.json();
+  }
+
+  async getUser(): Promise<IUser> {
+    const res = await this.get(`/user`);
+    return res.json();
+  }
+
+  async logout() {
+    const res = await this.post(`/logout`, {});
+    return res.json();
+  }
+
+  async setFeedback(
+    feedback: IFeedback
+  ): Promise<{ success: boolean; feedbackId: string }> {
+    const res = await this.put(`/feedback`, { feedback });
+    return res.json();
+  }
+
+  async deleteFeedback(feedbackId: string): Promise<{ success: boolean }> {
+    const res = await this.delete(`/feedback`, { feedbackId });
+    return res.json();
+  }
+
+  async listThreads(
+    pagination: IPagination,
+    filter: IThreadFilters
+  ): Promise<{
+    pageInfo: IPageInfo;
+    data: IThread[];
+  }> {
+    const res = await this.post(`/project/threads`, { pagination, filter });
+
+    return res.json();
+  }
+
+  async renameThread(threadId: string, name: string) {
+    const res = await this.put(`/project/thread`, { threadId, name });
+
+    return res.json();
+  }
+
+  async deleteThread(threadId: string) {
+    const res = await this.delete(`/project/thread`, { threadId });
+
+    return res.json();
+  }
+
+  uploadFile(
+    file: File,
+    onProgress: (progress: number) => void,
+    sessionId: string
+  ) {
+    const xhr = new XMLHttpRequest();
+    xhr.withCredentials = true;
+
+    const promise = new Promise<{ id: string }>((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      xhr.open(
+        'POST',
+        this.buildEndpoint(`/project/file?session_id=${sessionId}`),
+        true
+      );
+
+      // Track the progress of the upload
+      xhr.upload.onprogress = function (event) {
+        if (event.lengthComputable) {
+          const percentage = (event.loaded / event.total) * 100;
+          onProgress(percentage);
+        }
+      };
+
+      xhr.onload = function () {
+        if (xhr.status === 200) {
+          const response = JSON.parse(xhr.responseText);
+          resolve(response);
+          return;
+        }
+        const contentType = xhr.getResponseHeader('Content-Type');
+        if (contentType && contentType.includes('application/json')) {
+          const response = JSON.parse(xhr.responseText);
+          reject(response.detail);
+        } else {
+          reject('Upload failed');
+        }
+      };
+
+      xhr.onerror = function () {
+        reject('Upload error');
+      };
+
+      xhr.send(formData);
+    });
+
+    return { xhr, promise };
+  }
+
+  async callAction(action: IAction, sessionId: string) {
+    const res = await this.post(`/project/action`, { sessionId, action });
+
+    return res.json();
+  }
+
+  async updateElement(element: IElement, sessionId: string) {
+    const res = await this.put(`/project/element`, { sessionId, element });
+
+    return res.json();
+  }
+
+  async deleteElement(element: IElement, sessionId: string) {
+    const res = await this.delete(`/project/element`, { sessionId, element });
+
+    return res.json();
+  }
+
+  async connectStdioMCP(sessionId: string, name: string, fullCommand: string) {
+    const res = await this.post(`/mcp`, {
+      sessionId,
+      name,
+      fullCommand,
+      clientType: 'stdio'
+    });
+    return res.json();
+  }
+
+  async connectSseMCP(sessionId: string, name: string, url: string) {
+    const res = await this.post(`/mcp`, {
+      sessionId,
+      name,
+      url,
+      clientType: 'sse'
+    });
+    return res.json();
+  }
+
+  async disconnectMcp(sessionId: string, name: string) {
+    const res = await this.delete(`/mcp`, { sessionId, name });
+    return res.json();
+  }
+
+  getElementUrl(id: string, sessionId: string) {
+    const queryParams = `?session_id=${sessionId}`;
+    return this.buildEndpoint(`/project/file/${id}${queryParams}`);
+  }
+
+  getLogoEndpoint(theme: string) {
+    return this.buildEndpoint(`/logo?theme=${theme}`);
+  }
+
+  getOAuthEndpoint(provider: string) {
+    return this.buildEndpoint(`/auth/oauth/${provider}`);
+  }
+}
+
+
+
+================================================
+File: libs/react-client/src/api/hooks/api.ts
+================================================
+import { useContext, useMemo } from 'react';
+import { ChainlitAPI } from 'src/api';
+import { ChainlitContext } from 'src/context';
+import useSWR, { SWRConfig, SWRConfiguration } from 'swr';
+
+import { useAuthState } from './auth/state';
+
+const fetcher = async (client: ChainlitAPI, endpoint: string) => {
+  const res = await client.get(endpoint);
+  return res?.json();
+};
+
+const cloneClient = (client: ChainlitAPI): ChainlitAPI => {
+  // Shallow clone API client.
+  // TODO: Move me to core API.
+
+  // Create new client
+  const newClient = new ChainlitAPI('', 'webapp');
+
+  // Assign old properties to new client
+  Object.assign(newClient, client);
+
+  return newClient;
+};
+
+/**
+ * React hook for cached API data fetching using SWR (stale-while-revalidate).
+ * Optimized for GET requests with automatic caching and revalidation.
+ *
+ * Key features:
+ * - Automatic data caching and revalidation
+ * - Integration with React component lifecycle
+ * - Loading state management
+ * - Recoil state integration for global state
+ * - Memoized fetcher function to prevent unnecessary rerenders
+ *
+ * @param path - API endpoint path or null to disable the request
+ * @param config - Optional SWR configuration
+ * @returns SWR response object containing:
+ *          - data: The fetched data
+ *          - error: Any error that occurred
+ *          - isValidating: Whether a request is in progress
+ *          - mutate: Function to mutate the cached data
+ *
+ * @example
+ * const { data, error, isValidating } = useApi<UserData>('/user');
+ */
+function useApi<T>(
+  path?: string | null,
+  { ...swrConfig }: SWRConfiguration = {}
+) {
+  const client = useContext(ChainlitContext);
+  const { setUser } = useAuthState();
+
+  // Memoize the fetcher function to avoid recreating it on every render
+  const memoizedFetcher = useMemo(
+    () =>
+      ([url]: [url: string]) => {
+        if (!swrConfig.onErrorRetry) {
+          swrConfig.onErrorRetry = (...args) => {
+            const [err] = args;
+
+            // Don't do automatic retry for 401 - it just means we're not logged in (yet).
+            if (err.status === 401) {
+              setUser(null);
+              return;
+            }
+
+            // Fall back to default behavior.
+            return SWRConfig.defaultValue.onErrorRetry(...args);
+          };
+        }
+
+        const useApiClient = cloneClient(client);
+        useApiClient.on401 = useApiClient.onError = undefined;
+        return fetcher(useApiClient, url);
+      },
+    [client]
+  );
+
+  // Use a stable key for useSWR
+  const swrKey = useMemo(() => {
+    return path ? [path] : null;
+  }, [path]);
+
+  return useSWR<T, Error>(swrKey, memoizedFetcher, swrConfig);
+}
+
+export { useApi, fetcher };
+
+
+
+================================================
+File: libs/react-client/src/api/hooks/auth/config.ts
+================================================
+import { useEffect } from 'react';
+import { IAuthConfig } from 'src/index';
+
+import { useApi } from '../api';
+import { useAuthState } from './state';
+
+export const useAuthConfig = () => {
+  const { authConfig, setAuthConfig } = useAuthState();
+  const { data: authConfigData, isLoading } = useApi<IAuthConfig>(
+    authConfig ? null : '/auth/config'
+  );
+
+  useEffect(() => {
+    if (authConfigData) {
+      setAuthConfig(authConfigData);
+    }
+  }, [authConfigData, setAuthConfig]);
+
+  return { authConfig, isLoading };
+};
+
+
+
+================================================
+File: libs/react-client/src/api/hooks/auth/index.ts
+================================================
+import { IAuthConfig, IUser } from 'src/types';
+
+import { useAuthConfig } from './config';
+import { useSessionManagement } from './sessionManagement';
+import { useUserManagement } from './userManagement';
+
+export const useAuth = () => {
+  const { authConfig } = useAuthConfig();
+  const { logout } = useSessionManagement();
+  const { user, setUserFromAPI } = useUserManagement();
+
+  const isReady =
+    !!authConfig && (!authConfig.requireLogin || user !== undefined);
+
+  if (authConfig && !authConfig.requireLogin) {
+    return {
+      data: authConfig,
+      user: null,
+      isReady,
+      isAuthenticated: true,
+      logout: () => Promise.resolve(),
+      setUserFromAPI: () => Promise.resolve()
+    };
+  }
+
+  return {
+    data: authConfig,
+    user,
+    isReady,
+    isAuthenticated: !!user,
+    logout,
+    setUserFromAPI
+  };
+};
+
+export type { IAuthConfig, IUser };
+
+
+
+================================================
+File: libs/react-client/src/api/hooks/auth/sessionManagement.ts
+================================================
+import { useContext } from 'react';
+import { ChainlitContext } from 'src/index';
+
+import { useAuthState } from './state';
+
+export const useSessionManagement = () => {
+  const apiClient = useContext(ChainlitContext);
+  const { setUser, setThreadHistory } = useAuthState();
+
+  const logout = async (reload = false): Promise<void> => {
+    await apiClient.logout();
+    setUser(undefined);
+    setThreadHistory(undefined);
+
+    if (reload) {
+      window.location.reload();
+    }
+  };
+
+  return { logout };
+};
+
+
+
+================================================
+File: libs/react-client/src/api/hooks/auth/state.ts
+================================================
+import { useRecoilState, useSetRecoilState } from 'recoil';
+import { authState, threadHistoryState, userState } from 'src/state';
+
+export const useAuthState = () => {
+  const [authConfig, setAuthConfig] = useRecoilState(authState);
+  const [user, setUser] = useRecoilState(userState);
+  const setThreadHistory = useSetRecoilState(threadHistoryState);
+
+  return {
+    authConfig,
+    setAuthConfig,
+    user,
+    setUser,
+    setThreadHistory
+  };
+};
+
+
+
+================================================
+File: libs/react-client/src/api/hooks/auth/types.ts
+================================================
+import { IAuthConfig, IUser } from 'src/types';
+
+export interface JWTPayload extends IUser {
+  exp: number;
+}
+
+export interface AuthState {
+  data: IAuthConfig | undefined;
+  user: IUser | null;
+  isAuthenticated: boolean;
+  isReady: boolean;
+}
+
+export interface AuthActions {
+  logout: (reload?: boolean) => Promise<void>;
+  setUserFromAPI: () => Promise<void>;
+}
+
+export type IUseAuth = AuthState & AuthActions;
+
+
+
+================================================
+File: libs/react-client/src/api/hooks/auth/userManagement.ts
+================================================
+import { useEffect } from 'react';
+import { IUser } from 'src/types';
+
+import { useApi } from '../api';
+import { useAuthState } from './state';
+
+export const useUserManagement = () => {
+  const { user, setUser } = useAuthState();
+
+  const {
+    data: userData,
+    error,
+    isLoading,
+    mutate: setUserFromAPI
+  } = useApi<IUser>('/user');
+
+  useEffect(() => {
+    if (userData) {
+      setUser(userData);
+    } else if (isLoading) {
+      setUser(undefined);
+    }
+  }, [userData, isLoading, setUser]);
+
+  useEffect(() => {
+    if (error) {
+      setUser(null);
+    }
+  }, [error]);
+
+  return { user, setUserFromAPI };
+};
+
+
+
+================================================
+File: libs/react-client/src/types/action.ts
+================================================
+export interface IAction {
+  label: string;
+  forId: string;
+  id: string;
+  payload: Record<string, unknown>;
+  name: string;
+  onClick: () => void;
+  tooltip: string;
+  icon?: string;
+}
+
+export interface ICallFn {
+  callback: (payload: Record<string, any>) => void;
+  name: string;
+  args: Record<string, any>;
+}
+
+
+
+================================================
+File: libs/react-client/src/types/audio.ts
+================================================
+export interface OutputAudioChunk {
+  track: string;
+  mimeType: string;
+  data: Int16Array;
+}
+
+
+
+================================================
+File: libs/react-client/src/types/command.ts
+================================================
+export interface ICommand {
+  id: string;
+  icon: string;
+  description: string;
+  button?: boolean;
+  persistent?: boolean;
+}
+
+
+
+================================================
+File: libs/react-client/src/types/config.ts
+================================================
+export interface IStarter {
+  label: string;
+  message: string;
+  icon?: string;
+}
+
+export interface ChatProfile {
+  default: boolean;
+  icon?: string;
+  name: string;
+  markdown_description: string;
+  starters?: IStarter[];
+}
+
+export interface IAudioConfig {
+  enabled: boolean;
+  sample_rate: number;
+}
+
+export interface IAuthConfig {
+  requireLogin: boolean;
+  passwordAuth: boolean;
+  headerAuth: boolean;
+  oauthProviders: string[];
+  default_theme?: 'light' | 'dark';
+}
+
+export interface IChainlitConfig {
+  markdown?: string;
+  ui: {
+    name: string;
+    description?: string;
+    font_family?: string;
+    default_theme?: 'light' | 'dark';
+    layout?: 'default' | 'wide';
+    cot: 'hidden' | 'tool_call' | 'full';
+    github?: string;
+    custom_css?: string;
+    custom_js?: string;
+    custom_font?: string;
+    custom_meta_image_url?: string;
+    header_links?: { name: string; icon_url: string; url: string }[];
+  };
+  features: {
+    spontaneous_file_upload?: {
+      enabled?: boolean;
+      max_size_mb?: number;
+      max_files?: number;
+      accept?: string[] | Record<string, string[]>;
+    };
+    audio: IAudioConfig;
+    unsafe_allow_html?: boolean;
+    user_message_autoscroll?: boolean;
+    latex?: boolean;
+    edit_message?: boolean;
+    mcp?: boolean;
+  };
+  debugUrl?: string;
+  userEnv: string[];
+  dataPersistence: boolean;
+  threadResumable: boolean;
+  chatProfiles: ChatProfile[];
+  starters?: IStarter[];
+  translation: object;
+}
+
+
+
+================================================
+File: libs/react-client/src/types/element.ts
+================================================
+export type IElement =
+  | IImageElement
+  | ITextElement
+  | IPdfElement
+  | ITasklistElement
+  | IAudioElement
+  | IVideoElement
+  | IFileElement
+  | IPlotlyElement
+  | IDataframeElement
+  | ICustomElement;
+
+export type IMessageElement =
+  | IImageElement
+  | ITextElement
+  | IPdfElement
+  | IAudioElement
+  | IVideoElement
+  | IFileElement
+  | IPlotlyElement
+  | IDataframeElement
+  | ICustomElement;
+
+export type ElementType = IElement['type'];
+export type IElementSize = 'small' | 'medium' | 'large';
+
+interface TElement<T> {
+  id: string;
+  type: T;
+  threadId?: string;
+  forId: string;
+  mime?: string;
+  url?: string;
+  chainlitKey?: string;
+}
+
+interface TMessageElement<T> extends TElement<T> {
+  name: string;
+  display: 'inline' | 'side' | 'page';
+}
+
+export interface IImageElement extends TMessageElement<'image'> {
+  size?: IElementSize;
+}
+
+export interface ITextElement extends TMessageElement<'text'> {
+  language?: string;
+}
+
+export interface IPdfElement extends TMessageElement<'pdf'> {
+  page?: number;
+}
+
+export interface IAudioElement extends TMessageElement<'audio'> {
+  autoPlay?: boolean;
+}
+
+export interface IVideoElement extends TMessageElement<'video'> {
+  size?: IElementSize;
+
+  /**
+   * Override settings for each type of player in ReactPlayer
+   * https://github.com/cookpete/react-player?tab=readme-ov-file#config-prop
+   * @type {object}
+   */
+  playerConfig?: object;
+}
+
+export interface IFileElement extends TMessageElement<'file'> {
+  type: 'file';
+}
+
+export type IPlotlyElement = TMessageElement<'plotly'>;
+
+export type ITasklistElement = TElement<'tasklist'>;
+
+export type IDataframeElement = TMessageElement<'dataframe'>;
+
+export interface ICustomElement extends TMessageElement<'custom'> {
+  props: Record<string, unknown>;
+}
+
+
+
+================================================
+File: libs/react-client/src/types/feedback.ts
+================================================
+export interface IFeedback {
+  id?: string;
+  forId?: string;
+  threadId?: string;
+  comment?: string;
+  value: number;
+}
+
+
+
+================================================
+File: libs/react-client/src/types/file.ts
+================================================
+import { IAction } from './action';
+import { IStep } from './step';
+
+export interface FileSpec {
+  accept?: string[] | Record<string, string[]>;
+  max_size_mb?: number;
+  max_files?: number;
+}
+
+export interface ActionSpec {
+  keys?: string[];
+}
+
+export interface IFileRef {
+  id: string;
+}
+
+export interface IAsk {
+  callback: (payload: IStep | IFileRef[] | IAction) => void;
+  spec: {
+    type: 'text' | 'file' | 'action';
+    step_id: string;
+    timeout: number;
+  } & FileSpec &
+    ActionSpec;
+  parentId?: string;
+}
+
+
+
+================================================
+File: libs/react-client/src/types/history.ts
+================================================
+import { IThread } from 'src/types';
+
+import { IPageInfo } from '..';
+
+export type UserInput = {
+  content: string;
+  createdAt: number;
+};
+
+export type ThreadHistory = {
+  threads?: IThread[];
+  currentThreadId?: string;
+  timeGroupedThreads?: { [key: string]: IThread[] };
+  pageInfo?: IPageInfo;
+};
+
+
+
+================================================
+File: libs/react-client/src/types/index.ts
+================================================
+export * from './action';
+export * from './element';
+export * from './command';
+export * from './file';
+export * from './feedback';
+export * from './step';
+export * from './user';
+export * from './thread';
+export * from './history';
+export * from './config';
+export * from './mcp';
+
+
+
+================================================
+File: libs/react-client/src/types/mcp.ts
+================================================
+export interface IMcp {
+  name: string;
+  tools: [{ name: string }];
+  status: 'connected' | 'connecting' | 'failed';
+  clientType: 'sse' | 'stdio';
+  command?: string;
+  url?: string;
+}
+
+
+
+================================================
+File: libs/react-client/src/types/step.ts
+================================================
+import { IFeedback } from './feedback';
+
+type StepType =
+  | 'assistant_message'
+  | 'user_message'
+  | 'system_message'
+  | 'run'
+  | 'tool'
+  | 'llm'
+  | 'embedding'
+  | 'retrieval'
+  | 'rerank'
+  | 'undefined';
+
+export interface IStep {
+  id: string;
+  name: string;
+  type: StepType;
+  threadId?: string;
+  parentId?: string;
+  isError?: boolean;
+  command?: string;
+  showInput?: boolean | string;
+  waitForAnswer?: boolean;
+  input?: string;
+  output: string;
+  createdAt: number | string;
+  start?: number | string;
+  end?: number | string;
+  feedback?: IFeedback;
+  language?: string;
+  defaultOpen?: boolean;
+  streaming?: boolean;
+  steps?: IStep[];
+  metadata?: Record<string, any>;
+  //legacy
+  indent?: number;
+}
+
+
+
+================================================
+File: libs/react-client/src/types/thread.ts
+================================================
+import { IElement } from './element';
+import { IStep } from './step';
+
+export interface IThread {
+  id: string;
+  createdAt: number | string;
+  name?: string;
+  userId?: string;
+  userIdentifier?: string;
+  metadata?: Record<string, any>;
+  steps: IStep[];
+  elements?: IElement[];
+}
+
+
+
+================================================
+File: libs/react-client/src/types/user.ts
+================================================
+export type AuthProvider =
+  | 'credentials'
+  | 'header'
+  | 'github'
+  | 'google'
+  | 'azure-ad'
+  | 'azure-ad-hybrid';
+
+export interface IUserMetadata extends Record<string, any> {
+  tags?: string[];
+  image?: string;
+  provider?: AuthProvider;
+}
+
+export interface IUser {
+  id: string;
+  identifier: string;
+  display_name?: string;
+  metadata: IUserMetadata;
+}
+
+
+
+================================================
+File: libs/react-client/src/utils/group.ts
+================================================
+import { IThread } from 'src/types';
+
+export const groupByDate = (data: IThread[]) => {
+  const groupedData: { [key: string]: IThread[] } = {};
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  [...data]
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+    .forEach((item) => {
+      const threadDate = new Date(item.createdAt);
+      threadDate.setHours(0, 0, 0, 0);
+
+      const daysDiff = Math.floor(
+        (today.getTime() - threadDate.getTime()) / 86400000
+      );
+
+      let category: string;
+      if (daysDiff === 0) {
+        category = 'Today';
+      } else if (daysDiff === 1) {
+        category = 'Yesterday';
+      } else if (daysDiff <= 7) {
+        category = 'Previous 7 days';
+      } else if (daysDiff <= 30) {
+        category = 'Previous 30 days';
+      } else {
+        category = threadDate.toLocaleString('default', {
+          month: 'long',
+          year: 'numeric'
+        });
+      }
+
+      groupedData[category] ??= [];
+      groupedData[category].push(item);
+    });
+
+  return groupedData;
+};
+
+
+
+================================================
+File: libs/react-client/src/utils/message.ts
+================================================
+import { isEqual } from 'lodash';
+
+import { IStep } from '..';
+
+const nestMessages = (messages: IStep[]): IStep[] => {
+  let nestedMessages: IStep[] = [];
+
+  for (const message of messages) {
+    nestedMessages = addMessage(nestedMessages, message);
+  }
+
+  return nestedMessages;
+};
+
+const isLastMessage = (messages: IStep[], index: number) => {
+  if (messages.length - 1 === index) {
+    return true;
+  }
+
+  for (let i = index + 1; i < messages.length; i++) {
+    if (messages[i].streaming) {
+      continue;
+    } else {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+// Nested messages utils
+
+const addMessage = (messages: IStep[], message: IStep): IStep[] => {
+  if (hasMessageById(messages, message.id)) {
+    return updateMessageById(messages, message.id, message);
+  } else if ('parentId' in message && message.parentId) {
+    return addMessageToParent(messages, message.parentId, message);
+  } else if ('indent' in message && message.indent && message.indent > 0) {
+    return addIndentMessage(messages, message.indent, message);
+  } else {
+    return [...messages, message];
+  }
+};
+
+const addIndentMessage = (
+  messages: IStep[],
+  indent: number,
+  newMessage: IStep,
+  currentIndentation: number = 0
+): IStep[] => {
+  const nextMessages = [...messages];
+
+  if (nextMessages.length === 0) {
+    return [...nextMessages, newMessage];
+  } else {
+    const index = nextMessages.length - 1;
+    const msg = nextMessages[index];
+    msg.steps = msg.steps || [];
+
+    if (currentIndentation + 1 === indent) {
+      msg.steps = [...msg.steps, newMessage];
+      nextMessages[index] = { ...msg };
+
+      return nextMessages;
+    } else {
+      msg.steps = addIndentMessage(
+        msg.steps,
+        indent,
+        newMessage,
+        currentIndentation + 1
+      );
+
+      nextMessages[index] = { ...msg };
+      return nextMessages;
+    }
+  }
+};
+
+const addMessageToParent = (
+  messages: IStep[],
+  parentId: string,
+  newMessage: IStep
+): IStep[] => {
+  const nextMessages = [...messages];
+
+  for (let index = 0; index < nextMessages.length; index++) {
+    const msg = nextMessages[index];
+
+    if (isEqual(msg.id, parentId)) {
+      msg.steps = msg.steps ? [...msg.steps, newMessage] : [newMessage];
+      nextMessages[index] = { ...msg };
+    } else if (hasMessageById(nextMessages, parentId) && msg.steps) {
+      msg.steps = addMessageToParent(msg.steps, parentId, newMessage);
+      nextMessages[index] = { ...msg };
+    }
+  }
+
+  return nextMessages;
+};
+
+const findMessageById = (
+  messages: IStep[],
+  messageId: string
+): IStep | undefined => {
+  for (const message of messages) {
+    if (isEqual(message.id, messageId)) {
+      return message;
+    } else if (message.steps && message.steps.length > 0) {
+      const foundMessage = findMessageById(message.steps, messageId);
+      if (foundMessage) {
+        return foundMessage;
+      }
+    }
+  }
+  return undefined;
+};
+
+const hasMessageById = (messages: IStep[], messageId: string): boolean => {
+  return findMessageById(messages, messageId) !== undefined;
+};
+
+const updateMessageById = (
+  messages: IStep[],
+  messageId: string,
+  updatedMessage: IStep
+): IStep[] => {
+  const nextMessages = [...messages];
+
+  for (let index = 0; index < nextMessages.length; index++) {
+    const msg = nextMessages[index];
+
+    if (isEqual(msg.id, messageId)) {
+      nextMessages[index] = { steps: msg.steps, ...updatedMessage };
+    } else if (hasMessageById(nextMessages, messageId) && msg.steps) {
+      msg.steps = updateMessageById(msg.steps, messageId, updatedMessage);
+      nextMessages[index] = { ...msg };
+    }
+  }
+
+  return nextMessages;
+};
+
+const deleteMessageById = (messages: IStep[], messageId: string) => {
+  let nextMessages = [...messages];
+
+  for (let index = 0; index < nextMessages.length; index++) {
+    const msg = nextMessages[index];
+
+    if (msg.id === messageId) {
+      nextMessages = [
+        ...nextMessages.slice(0, index),
+        ...nextMessages.slice(index + 1)
+      ];
+    } else if (hasMessageById(nextMessages, messageId) && msg.steps) {
+      msg.steps = deleteMessageById(msg.steps, messageId);
+      nextMessages[index] = { ...msg };
+    }
+  }
+
+  return nextMessages;
+};
+
+const updateMessageContentById = (
+  messages: IStep[],
+  messageId: number | string,
+  updatedContent: string,
+  isSequence: boolean,
+  isInput: boolean
+): IStep[] => {
+  const nextMessages = [...messages];
+  for (let index = 0; index < nextMessages.length; index++) {
+    const msg = nextMessages[index];
+
+    if (isEqual(msg.id, messageId)) {
+      if ('content' in msg && msg.content !== undefined) {
+        if (isSequence) {
+          msg.content = updatedContent;
+        } else {
+          msg.content += updatedContent;
+        }
+      } else if (isInput) {
+        if ('input' in msg && msg.input !== undefined) {
+          if (isSequence) {
+            msg.input = updatedContent;
+          } else {
+            msg.input += updatedContent;
+          }
+        }
+      } else {
+        if ('output' in msg && msg.output !== undefined) {
+          if (isSequence) {
+            msg.output = updatedContent;
+          } else {
+            msg.output += updatedContent;
+          }
+        }
+      }
+
+      nextMessages[index] = { ...msg };
+    } else if (msg.steps) {
+      msg.steps = updateMessageContentById(
+        msg.steps,
+        messageId,
+        updatedContent,
+        isSequence,
+        isInput
+      );
+      nextMessages[index] = { ...msg };
+    }
+  }
+
+  return nextMessages;
+};
+
+export {
+  addMessageToParent,
+  addMessage,
+  deleteMessageById,
+  hasMessageById,
+  isLastMessage,
+  nestMessages,
+  updateMessageById,
+  updateMessageContentById
+};
+
+

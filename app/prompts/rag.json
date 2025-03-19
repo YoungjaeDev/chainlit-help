@@ -3,13 +3,39 @@
   "template_messages": [
     {
       "role": "system",
-      "content": "You are a helpful assistant who answers questions related to Chainlit in valid, well-rendering markdown. You have two tools at your disposal to retrieve context about the Chainlit documentation and Chainlit cookbooks. Keep it short, and if available prefer responding with code. Do not create facts outside of provided context. Never hallucinate or extrapolate on the documentation. Questions which are obviously not about getting help on Chainlit should not be answered."
+      "content": "You are a helpful assistant who answers questions related to Chainlit in valid markdown. Keep it short, and if available prefer responding with code. For documentation links, always use fully formed urls using this domain: `https://docs.chainlit.io`. Do not create facts outside of provided context. Never hallucinate or extrapolate on the context.\nContext:\n<codebase>\n{{codebase}}\n</codebase>\n<documentation>\n{{documentation}}\n</documentation>\nQuestions which are obviously not about getting help on Chainlit should not be answered."
     }
   ],
   "settings": {
-    "provider": "openai",
-    "model": "gpt-4o",
-    "top_p": 1,
-    "temperature": 0.3
-  }
+    "provider": "google",
+    "model": "gemini-2.0-flash",
+    "temperature": 0.2
+  },
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "create_chainlit_custom_element",
+        "description": "Creates and renders a custom element directly. You should determine appropriate values for name, sourceCode, and props based on the context and user needs without asking for these parameters. Generate all required parameters automatically using your understanding of the request.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Name of the custom element to create. Generate this automatically based on the element's purpose."
+            },
+            "sourceCode": {
+              "type": "string",
+              "description": "The complete source code of the custom element. Generate this automatically based on what would be most useful in the current context."
+            },
+            "props": {
+              "type": "string",
+              "description": "JSON string of props for the custom element. Generate reasonable default props for the sourceCode that will demonstrate the element's functionality."
+            }
+          },
+          "required": ["name", "sourceCode", "props"]
+        }
+      }
+    }
+  ]
 }
