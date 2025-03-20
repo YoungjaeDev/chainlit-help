@@ -7,7 +7,7 @@ enable_telemetry = true
 user_env = []
 
 # Duration (in seconds) during which the session is saved when the connection is lost
-session_timeout = 3600
+session_timeout = 300
 
 # Duration (in seconds) of the user session expiry
 user_session_timeout = 1296000  # 15 days
@@ -47,8 +47,8 @@ edit_message = true
     #    accept = { "application/octet-stream" = [".xyz", ".pdb"] }
     # Note: Using "*/*" is not recommended as it may cause browser warnings
     accept = ["*/*"]
-    max_files = 20
-    max_size_mb = 500
+    max_files = 2
+    max_size_mb = 10
 
 [features.audio]
     # Sample rate of the audio
