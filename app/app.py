@@ -5,9 +5,11 @@ import discord
 import chainlit as cl
 from chainlit.discord.app import client as discord_client
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.schema import HumanMessage, AIMessage
+from langchain_anthropic import ChatAnthropic
+from langchain.schema import HumanMessage, AIMessage, SystemMessage
 from langchain_core.messages import AIMessageChunk, ToolCallChunk, ToolCall, ToolMessage
 from langchain.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field
 
 from dotenv import load_dotenv
 
@@ -26,6 +28,9 @@ lai_client = LiteralClient()
 prompt_path = os.path.join(os.getcwd(), "app/prompts/rag.json")
 codebase_path = os.path.join(os.getcwd(), "app/context/codebase.txt")
 documentation_path = os.path.join(os.getcwd(), "app/context/documentation.txt")
+generate_custom_element_system_prompt_path = os.path.join(
+    os.getcwd(), "app/prompts/generate_custom_element_system_prompt.txt"
+)
 
 # We load the RAG prompt in Literal to track prompt iteration and
 # enable LLM replays from Literal AI.
@@ -37,12 +42,27 @@ with open(prompt_path, "r") as f:
         settings=rag_prompt["settings"],
         tools=rag_prompt["tools"],
     )
-    
+
 with open(codebase_path, "r") as codebase_file:
     codebase_content = codebase_file.read()
 
 with open(documentation_path, "r") as documentation_file:
     documentation_content = documentation_file.read()
+
+with open(generate_custom_element_system_prompt_path, "r") as f:
+    generate_custom_element_system_prompt = f.read()
+
+
+commands = [
+    {
+        "id": "GenUI",
+        "icon": "palette",
+        "description": "Generate a Chainlit custom element",
+        "button": True,
+        "persistent": True,
+    },
+]
+
 
 @cl.set_starters
 async def set_starters():
@@ -66,24 +86,28 @@ async def set_starters():
             label="Chainlit hello world",
             message="Write a Chainlit hello world app.",
             icon="/public/terminal.svg",
-        )
+        ),
     ]
 
 
 @cl.on_chat_start
 async def on_chat_start():
     client_type = cl.user_session.get("client_type")
-    
+
     langchain_prompt: ChatPromptTemplate = prompt.to_langchain_chat_prompt_template()
-    
-    messages = langchain_prompt.format_messages(documentation=documentation_content, codebase=codebase_content)
-    
+
+    messages = langchain_prompt.format_messages(
+        documentation=documentation_content, codebase=codebase_content
+    )
+
     cl.user_session.set("messages", messages)
     cl.user_session.set("settings", prompt.settings)
     cl.user_session.set("tools", prompt.tools if client_type != "discord" else None)
 
     if client_type == "discord":
         prompt.settings["max_tokens"] = DISCORD_MAX_TOKENS
+    else:
+        await cl.context.emitter.set_commands(commands)
 
 
 async def use_discord_history(limit=10):
@@ -98,13 +122,17 @@ async def use_discord_history(limit=10):
             if x.author.name == discord_client.user.name:
                 messages.append(
                     AIMessage(
-                        content=x.clean_content if x.clean_content is not None else x.channel.name
+                        content=x.clean_content
+                        if x.clean_content is not None
+                        else x.channel.name
                     )
                 )
             else:
                 messages.append(
                     HumanMessage(
-                        content=x.clean_content if x.clean_content is not None else x.channel.name
+                        content=x.clean_content
+                        if x.clean_content is not None
+                        else x.channel.name
                     )
                 )
 
@@ -114,40 +142,87 @@ def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
+
+@cl.step(type="tool")
+async def generate_custom_element(query: str):
+    class CustomElement(BaseModel):
+        name: str = Field(description="Camel case name of the custom element.")
+        sourceCode: str = Field(
+            description="The complete source code of the custom element. Generate this automatically based on what would be most useful in the current context."
+        )
+        props: str = Field(
+            description="JSON string of props for the custom element. Generate reasonable default props for the sourceCode that will demonstrate the element's functionality."
+        )
+
+    llm = ChatAnthropic(
+        model="claude-3-5-sonnet-latest",
+        temperature=0.2,
+        max_tokens=4000,
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+    )
+
+    llm = llm.with_structured_output(CustomElement)
+
+    messages = [SystemMessage(content=generate_custom_element_system_prompt)]
+
+    if previous_iteration := cl.user_session.get("previous_iteration"):
+        messages.append(previous_iteration)
+
+    messages.append(HumanMessage(content=query))
+
+    result = await llm.ainvoke(messages)
+
+    props = result.model_dump()
+
+    if isinstance(props["props"], str):
+        props["props"] = json.loads(props["props"])
+
+    cl.user_session.set(
+        "previous_iteration",
+        AIMessage(content=f"Previous query: '{query}'\nPrevious result:\n{result.model_dump_json(indent=4)}"),
+    )
+
+    return props
+
+
 async def handle_tools_calls(tool_calls: list[ToolCallChunk]):
     ai_message = AIMessage(content="", tool_calls=[])
     tool_messages: list[ToolMessage] = []
-    
+
     for tool_call in tool_calls:
-        if tool_call["name"] == "create_chainlit_custom_element":
+        if tool_call["name"] == "generate_component":
             args = json.loads(tool_call["args"])
-            args["props"] = json.loads(args["props"])
-            ai_message.tool_calls.append(ToolCall(name=tool_call["name"], args=args, id=tool_call["id"]))
-            tool_messages.append(ToolMessage(tool_call_id=tool_call["id"], content="Custom element created and displayed to the user. Do NOT repeat the details of this custom element to the user. Explain to the user how to use it in his Chainlit app if necessary."))
-            async with cl.Step(name=tool_call["name"], type="tool") as s:
-                s.input = json.dumps(args, indent=4)
-                s.show_input = "json"
-            custom_element = cl.CustomElement(name="ChainlitArtifact", props=args)
+            ai_message.tool_calls.append(
+                ToolCall(name=tool_call["name"], args=args, id=tool_call["id"])
+            )
+            tool_messages.append(
+                ToolMessage(
+                    tool_call_id=tool_call["id"],
+                    content="Custom element created and displayed to the user. Do NOT repeat the details of this custom element to the user. Explain to the user how to use it in his Chainlit app if necessary.",
+                )
+            )
+            props = await generate_custom_element(**args)
+            custom_element = cl.CustomElement(name="ChainlitArtifact", props=props)
             await cl.Message(content="", elements=[custom_element]).send()
         else:
             raise ValueError(f"Invalid tool call {tool_call['name']}")
-        
+
     return ai_message, tool_messages
 
 
 @cl.step(name="Chainlit Agent", type="run")
 async def chainlit_agent(question, images_content):
     messages = cl.user_session.get("messages", []) or []
-    
+
     # Prepare the content with text and images
     content = question
-    # Note: For multi-modal support, you'd need to modify this depending on 
+    # Note: For multi-modal support, you'd need to modify this depending on
     # how your LLM handles images with LangChain. This is a simplified version.
     if images_content:
         # This approach may need to be adjusted based on the LLM's specific requirements
-        image_descriptions = [f"[Image {i+1}]" for i in range(len(images_content))]
+        image_descriptions = [f"[Image {i + 1}]" for i in range(len(images_content))]
         content = f"{content}\n{' '.join(image_descriptions)}"
-    
+
     # Add the user message
     messages.append(HumanMessage(content=content))
     cl.user_session.set("messages", messages)
@@ -161,23 +236,25 @@ async def chainlit_agent(question, images_content):
     )
     if tools:
         llm = llm.bind_tools(tools)
-    
+
     answer_message = None
     iteration_count = 0
-    
+
     while iteration_count < 2:
         tool_calls: list[ToolCallChunk] = []
-        async for chunk in llm.astream(messages, config={"callbacks": [cl.LangchainCallbackHandler()]}):
+        async for chunk in llm.astream(
+            messages, config={"callbacks": [cl.LangchainCallbackHandler()]}
+        ):
             if isinstance(chunk, AIMessageChunk) and chunk.tool_call_chunks:
                 tool_calls += chunk.tool_call_chunks
             elif chunk.content:
                 if answer_message is None:
                     answer_message = cl.Message("")
                 # Gemini Flash 2.0 tends to start code blocks on existing lines, which breaks markdown formatting
-                if '```' in chunk.content:
-                    chunk.content = chunk.content.replace('```', '\n```')
+                if "```" in chunk.content:
+                    chunk.content = chunk.content.replace("```", "\n```")
                 await answer_message.stream_token(chunk.content)
-                
+
         if tool_calls:
             ai_message, tool_messages = await handle_tools_calls(tool_calls)
             messages.append(ai_message)
@@ -187,7 +264,7 @@ async def chainlit_agent(question, images_content):
             # Add assistant's response to the message history
             messages.append(AIMessage(content=answer_message.content))
             await answer_message.send()
-        
+
             # Handle Discord's character limit
             if (
                 cl.user_session.get("client_type") == "discord"
@@ -200,8 +277,15 @@ async def chainlit_agent(question, images_content):
 
             break
 
+
 @cl.on_message
 async def main(message: cl.Message):
+    if message.command == "GenUI":
+        props = await generate_custom_element(message.content)
+        custom_element = cl.CustomElement(name="ChainlitArtifact", props=props)
+        await cl.Message(content="", elements=[custom_element]).send()
+        return
+
     images_content = []
     if message.elements:
         images = [file for file in message.elements if "image" in file.mime]
@@ -212,7 +296,7 @@ async def main(message: cl.Message):
         images_content = [
             {
                 "type": "input_image",
-                "image_url": f"data:{image.mime};base64,{encode_image(image.path)}"
+                "image_url": f"data:{image.mime};base64,{encode_image(image.path)}",
             }
             for image in images
         ]

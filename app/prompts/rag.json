@@ -15,25 +15,17 @@
     {
       "type": "function",
       "function": {
-        "name": "create_chainlit_custom_element",
-        "description": "Creates and renders a custom element directly. You should determine appropriate values for name, sourceCode, and props based on the context and user needs without asking for these parameters. Generate all required parameters automatically using your understanding of the request.",
+        "name": "generate_component",
+        "description": "Generate and renders a UI component. ALWAYS call this tool when the user is asking to generate a custom element or component.",
         "parameters": {
           "type": "object",
           "properties": {
-            "name": {
+            "query": {
               "type": "string",
-              "description": "Name of the custom element to create. Generate this automatically based on the element's purpose."
-            },
-            "sourceCode": {
-              "type": "string",
-              "description": "The complete source code of the custom element. Generate this automatically based on what would be most useful in the current context."
-            },
-            "props": {
-              "type": "string",
-              "description": "JSON string of props for the custom element. Generate reasonable default props for the sourceCode that will demonstrate the element's functionality."
+              "description": "The user query to create the component."
             }
           },
-          "required": ["name", "sourceCode", "props"]
+          "required": ["query"]
         }
       }
     }

@@ -1,0 +1,100 @@
+To implement a Chainlit custom element source code, follow these instructions.
+
+### Component definition
+
+Only write JSX code, no TSX. Each `.jsx` file should export default one component like:
+
+```jsx
+export default function MyComponent() {
+    return <div>Hello World</div>
+}
+```
+
+The component `props` are globally injected (not as a function argument). **NEVER** pass them as function argument.
+
+### Use Tailwind for Styling
+
+Under the hood, the code will be rendered in a shadcn + tailwind environment.
+The theme is relying on CSS variables.
+
+Here is an example rendering a `div` with a primary color background and round border:
+
+```jsx
+export default function TailwindExample() {
+    return <div className="bg-primary rounded-md h-4 w-full" />
+}
+```
+
+### Only Use Allowed Imports
+
+Only use available packages for imports. Here is the full list:
+
+- `react`
+- `sonner`
+- `zod`
+- `recoil`
+- `react-hook-form`
+- `lucide-react`
+- `@/components/ui/accordion`
+- `@/components/ui/aspect-ratio`
+- `@/components/ui/avatar`
+- `@/components/ui/badge`
+- `@/components/ui/button`
+- `@/components/ui/card`
+- `@/components/ui/carousel`
+- `@/components/ui/checkbox`
+- `@/components/ui/command`
+- `@/components/ui/dialog`
+- `@/components/ui/dropdown-menu`
+- `@/components/ui/form`
+- `@/components/ui/hover-card`
+- `@/components/ui/input`
+- `@/components/ui/label`
+- `@/components/ui/pagination`
+- `@/components/ui/popover`
+- `@/components/ui/progress`
+- `@/components/ui/scroll-area`
+- `@/components/ui/separator`
+- `@/components/ui/select`
+- `@/components/ui/sheet`
+- `@/components/ui/skeleton`
+- `@/components/ui/switch`
+- `@/components/ui/table`
+- `@/components/ui/textarea`
+- `@/components/ui/tooltip`
+
+<Note>The `@/components/ui` imports are from Shadcn.</Note>
+
+### Available APIs
+
+Chainlit exposes the following APIs globally to make the custom element interactive.
+
+```ts
+interface APIs {
+    // Update the element props. This will re-render the element.
+    updateElement: (nextProps: Record<string, any>) => Promise<{success: boolean}>;
+    // Delete the element entirely.
+    deleteElement: () => Promise<{success: boolean}>;
+    // Call an action defined in the Chainlit app
+    callAction: (action: {name: string, payload: Record<string, unknown>}) =>Promise<{success: boolean}>;
+    // Send a user message
+    sendUserMessage: (message: string) => void;
+}
+```
+
+### Example of a Counter Element
+
+```jsx
+import { Button } from "@/components/ui/button"
+import { X, Plus } from 'lucide-react';
+
+export default function Counter() {
+    return (
+        <div id="custom-counter" className="mt-4 flex flex-col gap-2">
+                <div>Count: {props.count}</div>
+                <Button id="increment" onClick={() => updateElement(Object.assign(props, {count: props.count + 1}))}><Plus /> Increment</Button>
+                <Button id="remove" onClick={deleteElement}><X /> Remove</Button>
+        </div>
+    );
+}
+```
