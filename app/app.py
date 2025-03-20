@@ -195,13 +195,13 @@ async def handle_tools_calls(tool_calls: list[ToolCallChunk]):
             ai_message.tool_calls.append(
                 ToolCall(name=tool_call["name"], args=args, id=tool_call["id"])
             )
+            props = await generate_custom_element(**args)
             tool_messages.append(
                 ToolMessage(
                     tool_call_id=tool_call["id"],
-                    content="Custom element created and displayed to the user. Do NOT repeat the details of this custom element to the user. Explain to the user how to use it in his Chainlit app if necessary.",
+                    content=f"Do NOT repeat the details of this custom element to the user. Explain to the user how to use it in his Chainlit app if necessary. Generated component:\n{json.dumps(props, indent=4)}",
                 )
             )
-            props = await generate_custom_element(**args)
             custom_element = cl.CustomElement(name="ChainlitArtifact", props=props)
             await cl.Message(content="", elements=[custom_element]).send()
         else:
