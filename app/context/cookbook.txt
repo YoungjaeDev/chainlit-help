@@ -1,0 +1,1263 @@
+Directory structure:
+└── chainlit-cookbook/
+    ├── map-canvas/
+    │   ├── README.md
+    │   ├── app.py
+    │   ├── chainlit.md
+    │   ├── requirements.txt
+    │   └── public/
+    │       └── elements/
+    │           └── Map.jsx
+    └── realtime-assistant/
+        ├── README.md
+        ├── app.py
+        ├── chainlit.md
+        ├── requirements.txt
+        ├── .env.example
+        └── realtime/
+            ├── __init__.py
+            └── tools.py
+
+================================================
+File: map-canvas/README.md
+================================================
+---
+title: 'Chainlit Canvas'
+tags: ['canvas']
+---
+
+# Chainlit Canvas
+
+This folder shows how to use the element side bar as a canvas
+
+https://github.com/user-attachments/assets/2acf8b46-8cf3-4908-a9e2-5e0780e0c38c
+
+
+
+================================================
+File: map-canvas/app.py
+================================================
+import json
+import chainlit as cl
+from anthropic import AsyncAnthropic
+
+SYSTEM = "you are a helpful assistant."
+MODEL_NAME = "claude-3-5-sonnet-latest"
+c = AsyncAnthropic()
+
+
+@cl.step(type="tool")
+async def move_map_to(latitude: float, longitude: float):
+    await open_map()
+
+    fn = cl.CopilotFunction(
+        name="move-map", args={"latitude": latitude, "longitude": longitude}
+    )
+    await fn.acall()
+
+    return "Map moved!"
+
+
+tools = [
+    {
+        "name": "move_map_to",
+        "description": "Move the map to the given latitude and longitude.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "latitude": {
+                    "type": "string",
+                    "description": "The latitude of the location to move the map to",
+                },
+                "longitude": {
+                    "type": "string",
+                    "description": "The longitude of the location to move the map to",
+                },
+            },
+            "required": ["latitude", "longitude"],
+        },
+    }
+]
+
+TOOL_FUNCTIONS = {
+    "move_map_to": move_map_to,
+}
+
+
+async def call_claude(chat_messages):
+    msg = cl.Message(content="", author="Claude")
+
+    async with c.messages.stream(
+        max_tokens=1024,
+        system=SYSTEM,
+        messages=chat_messages,
+        tools=tools,
+        model=MODEL_NAME,
+    ) as stream:
+        async for text in stream.text_stream:
+            await msg.stream_token(text)
+
+    await msg.send()
+    response = await stream.get_final_message()
+
+    return response
+
+
+async def call_tool(tool_use):
+    tool_name = tool_use.name
+    tool_input = tool_use.input
+
+    tool_function = TOOL_FUNCTIONS.get(tool_name)
+
+    if tool_function:
+        try:
+            return await tool_function(**tool_input)
+        except TypeError:
+            return json.dumps({"error": f"Invalid input for {tool_name}"})
+    else:
+        return json.dumps({"error": f"Invalid tool: {tool_name}"})
+
+
+async def open_map():
+    map_props = {"latitude": 37.7749, "longitude": -122.4194, "zoom": 12}
+    custom_element = cl.CustomElement(name="Map", props=map_props, display="inline")
+    await cl.ElementSidebar.set_title("canvas")
+    await cl.ElementSidebar.set_elements([custom_element], key="map-canvas")
+
+
+@cl.action_callback("close_map")
+async def on_test_action():
+    await cl.ElementSidebar.set_elements([])
+
+
+@cl.set_starters
+async def set_starters():
+    return [
+        cl.Starter(
+            label="Paris",
+            message="Show me Paris.",
+        ),
+        cl.Starter(
+            label="NYC",
+            message="Show me NYC.",
+        ),
+        cl.Starter(
+            label="Tokyo",
+            message="Show me Tokyo.",
+        ),
+    ]
+
+
+@cl.on_chat_start
+async def on_start():
+    cl.user_session.set("chat_messages", [])
+
+    await open_map()
+
+
+@cl.on_message
+async def on_message(msg: cl.Message):
+    chat_messages = cl.user_session.get("chat_messages")
+    chat_messages.append({"role": "user", "content": msg.content})
+    response = await call_claude(chat_messages)
+
+    while response.stop_reason == "tool_use":
+        tool_use = next(block for block in response.content if block.type == "tool_use")
+        tool_result = await call_tool(tool_use)
+
+        messages = [
+            {"role": "assistant", "content": response.content},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": str(tool_result),
+                    }
+                ],
+            },
+        ]
+
+        chat_messages.extend(messages)
+        response = await call_claude(chat_messages)
+
+    final_response = next(
+        (block.text for block in response.content if hasattr(block, "text")),
+        None,
+    )
+
+    chat_messages = cl.user_session.get("chat_messages")
+    chat_messages.append({"role": "assistant", "content": final_response})
+
+
+
+================================================
+File: map-canvas/chainlit.md
+================================================
+# Welcome to Chainlit! 🚀🤖
+
+Hi there, Developer! 👋 We're excited to have you on board. Chainlit is a powerful tool designed to help you prototype, debug and share applications built on top of LLMs.
+
+## Useful Links 🔗
+
+- **Documentation:** Get started with our comprehensive [Chainlit Documentation](https://docs.chainlit.io) 📚
+- **Discord Community:** Join our friendly [Chainlit Discord](https://discord.gg/k73SQ3FyUh) to ask questions, share your projects, and connect with other developers! 💬
+
+We can't wait to see what you create with Chainlit! Happy coding! 💻😊
+
+## Welcome screen
+
+To modify the welcome screen, edit the `chainlit.md` file at the root of your project. If you do not want a welcome screen, just leave this file empty.
+
+
+
+================================================
+File: map-canvas/requirements.txt
+================================================
+chainlit=>2.4.3
+
+
+================================================
+File: map-canvas/public/elements/Map.jsx
+================================================
+import React, { useEffect, useRef } from "react";
+import { useRecoilValue } from "recoil";
+import { callFnState } from "@chainlit/react-client";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
+
+export default function GoogleMap() {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const callFn = useRecoilValue(callFnState);
+
+  useEffect(() => {
+    // Check if API is already loaded
+    if (window.google && window.google.maps) {
+      // Maps API already loaded, initialize map directly
+      initializeMap();
+      return;
+    }
+
+    // Check if the script is already in the process of loading
+    const existingScript = document.querySelector(
+      `script[src^="https://maps.googleapis.com/maps/api/js"]`
+    );
+
+    if (existingScript) {
+      // Script is loading but not ready, wait for it
+      const originalCallback = window.initMap;
+      window.initMap = () => {
+        if (originalCallback) originalCallback();
+        initializeMap();
+      };
+      return;
+    }
+
+    // Load the script only if it's not already loaded or loading
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?&callback=initMap`;
+    script.async = true;
+    script.defer = true;
+
+    // Define the callback function
+    window.initMap = initializeMap;
+
+    document.head.appendChild(script);
+
+    // Clean up
+    return () => {
+      // Don't remove the script as other components might be using it
+      // Just clean up our callback
+      if (window.initMap === initializeMap) {
+        window.initMap = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (callFn?.name === "move-map") {
+      const { latitude, longitude } = callFn.args;
+      moveMapTo(latitude, longitude);
+      callFn.callback();
+    }
+  }, [callFn]);
+
+  const initializeMap = () => {
+    if (mapRef.current && !mapInstanceRef.current) {
+      mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
+        center: { lat: props.latitude, lng: props.longitude },
+        zoom: props.zoom,
+      });
+    }
+  };
+
+  const moveMapTo = (newLat, newLng, newZoom = 12) => {
+    if (!mapInstanceRef.current) return false;
+
+    // Create a new LatLng object
+    const newPosition = new window.google.maps.LatLng(newLat, newLng);
+
+    // Pan the map to the new position
+    mapInstanceRef.current.panTo(newPosition);
+
+    // Update zoom if provided
+    if (newZoom !== null) {
+      mapInstanceRef.current.setZoom(newZoom);
+    }
+
+    return true;
+  };
+
+  return (
+    <div className="h-full w-full relative">
+      <Button
+        className="absolute z-10"
+        style={{top: ".5rem", left: ".5rem"}}
+        onClick={() => callAction({ name: "close_map", payload: {} })}
+        size="icon"
+      >
+        <ArrowLeft />
+      </Button>
+      <div ref={mapRef} className="h-full w-full" />
+    </div>
+  );
+}
+
+
+
+================================================
+File: realtime-assistant/README.md
+================================================
+Title: Realtime Assistant
+Tags: [multimodal, audio]
+
+# Open AI realtime API with Chainlit
+
+This cookbook demonstrates how to build realtime copilots with Chainlit.
+
+## Key Features
+
+- **Realtime Python Client**: Based off https://github.com/openai/openai-realtime-api-beta
+- **Multimodal experience**: Speak and write to the assistant at the same time
+- **Tool calling**: Ask the assistant to perform tasks and see their output in the UI
+- **Visual Presence**: Visual cues indicating if the assistant is listening or speaking
+
+
+
+================================================
+File: realtime-assistant/app.py
+================================================
+import os
+import asyncio
+from openai import AsyncOpenAI
+
+import chainlit as cl
+from uuid import uuid4
+from chainlit.logger import logger
+
+from realtime import RealtimeClient
+from realtime.tools import tools
+
+client = AsyncOpenAI()
+
+
+async def setup_openai_realtime():
+    """Instantiate and configure the OpenAI Realtime Client"""
+    openai_realtime = RealtimeClient(api_key=os.getenv("OPENAI_API_KEY"))
+    cl.user_session.set("track_id", str(uuid4()))
+
+    async def handle_conversation_updated(event):
+        item = event.get("item")
+        delta = event.get("delta")
+        """Currently used to stream audio back to the client."""
+        if delta:
+            # Only one of the following will be populated for any given event
+            if "audio" in delta:
+                audio = delta["audio"]  # Int16Array, audio added
+                await cl.context.emitter.send_audio_chunk(
+                    cl.OutputAudioChunk(
+                        mimeType="pcm16",
+                        data=audio,
+                        track=cl.user_session.get("track_id"),
+                    )
+                )
+            if "transcript" in delta:
+                transcript = delta["transcript"]  # string, transcript added
+                pass
+            if "arguments" in delta:
+                arguments = delta["arguments"]  # string, function arguments added
+                pass
+
+    async def handle_item_completed(item):
+        """Used to populate the chat context with transcription once an item is completed."""
+        # print(item) # TODO
+        pass
+
+    async def handle_conversation_interrupt(event):
+        """Used to cancel the client previous audio playback."""
+        cl.user_session.set("track_id", str(uuid4()))
+        await cl.context.emitter.send_audio_interrupt()
+
+    async def handle_error(event):
+        logger.error(event)
+
+    openai_realtime.on("conversation.updated", handle_conversation_updated)
+    openai_realtime.on("conversation.item.completed", handle_item_completed)
+    openai_realtime.on("conversation.interrupted", handle_conversation_interrupt)
+    openai_realtime.on("error", handle_error)
+
+    cl.user_session.set("openai_realtime", openai_realtime)
+    coros = [
+        openai_realtime.add_tool(tool_def, tool_handler)
+        for tool_def, tool_handler in tools
+    ]
+    await asyncio.gather(*coros)
+
+
+@cl.on_chat_start
+async def start():
+    await cl.Message(
+        content="Welcome to the Chainlit x OpenAI realtime example. Press `P` to talk!"
+    ).send()
+    await setup_openai_realtime()
+
+
+@cl.on_message
+async def on_message(message: cl.Message):
+    openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
+    if openai_realtime and openai_realtime.is_connected():
+        # TODO: Try image processing with message.elements
+        await openai_realtime.send_user_message_content(
+            [{"type": "input_text", "text": message.content}]
+        )
+    else:
+        await cl.Message(
+            content="Please activate voice mode before sending messages!"
+        ).send()
+
+
+@cl.on_audio_start
+async def on_audio_start():
+    try:
+        openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
+        await openai_realtime.connect()
+        logger.info("Connected to OpenAI realtime")
+        # TODO: might want to recreate items to restore context
+        # openai_realtime.create_conversation_item(item)
+        return True
+    except Exception as e:
+        await cl.ErrorMessage(
+            content=f"Failed to connect to OpenAI realtime: {e}"
+        ).send()
+        return False
+
+
+@cl.on_audio_chunk
+async def on_audio_chunk(chunk: cl.InputAudioChunk):
+    openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
+    if openai_realtime.is_connected():
+        await openai_realtime.append_input_audio(chunk.data)
+    else:
+        logger.info("RealtimeClient is not connected")
+
+
+@cl.on_audio_end
+@cl.on_chat_end
+@cl.on_stop
+async def on_end():
+    openai_realtime: RealtimeClient = cl.user_session.get("openai_realtime")
+    if openai_realtime and openai_realtime.is_connected():
+        await openai_realtime.disconnect()
+
+
+
+================================================
+File: realtime-assistant/chainlit.md
+================================================
+# Welcome to Chainlit! 🚀🤖
+
+Hi there, Developer! 👋 We're excited to have you on board. Chainlit is a powerful tool designed to help you prototype, debug and share applications built on top of LLMs.
+
+## Useful Links 🔗
+
+- **Documentation:** Get started with our comprehensive [Chainlit Documentation](https://docs.chainlit.io) 📚
+- **Discord Community:** Join our friendly [Chainlit Discord](https://discord.gg/k73SQ3FyUh) to ask questions, share your projects, and connect with other developers! 💬
+
+We can't wait to see what you create with Chainlit! Happy coding! 💻😊
+
+## Welcome screen
+
+To modify the welcome screen, edit the `chainlit.md` file at the root of your project. If you do not want a welcome screen, just leave this file empty.
+
+
+
+================================================
+File: realtime-assistant/requirements.txt
+================================================
+chainlit
+openai
+yfinance
+plotly
+websockets==14.1
+
+
+
+================================================
+File: realtime-assistant/.env.example
+================================================
+OPENAI_API_KEY=your-openai-api-key
+
+# Optional, enable multi modal observability on https://cloud.getliteral.ai
+LITERAL_API_KEY=your-literal-api-key
+
+
+
+================================================
+File: realtime-assistant/realtime/__init__.py
+================================================
+# Derived from https://github.com/openai/openai-realtime-console. Will integrate with Chainlit when more mature.
+
+import os
+import asyncio
+import inspect
+import numpy as np
+import json
+import websockets
+from datetime import datetime
+from collections import defaultdict
+import base64
+
+from chainlit.logger import logger
+from chainlit.config import config
+
+
+def float_to_16bit_pcm(float32_array):
+    """
+    Converts a numpy array of float32 amplitude data to a numpy array in int16 format.
+    :param float32_array: numpy array of float32
+    :return: numpy array of int16
+    """
+    int16_array = np.clip(float32_array, -1, 1) * 32767
+    return int16_array.astype(np.int16)
+
+
+def base64_to_array_buffer(base64_string):
+    """
+    Converts a base64 string to a numpy array buffer.
+    :param base64_string: base64 encoded string
+    :return: numpy array of uint8
+    """
+    binary_data = base64.b64decode(base64_string)
+    return np.frombuffer(binary_data, dtype=np.uint8)
+
+
+def array_buffer_to_base64(array_buffer):
+    """
+    Converts a numpy array buffer to a base64 string.
+    :param array_buffer: numpy array
+    :return: base64 encoded string
+    """
+    if array_buffer.dtype == np.float32:
+        array_buffer = float_to_16bit_pcm(array_buffer)
+    elif array_buffer.dtype == np.int16:
+        array_buffer = array_buffer.tobytes()
+    else:
+        array_buffer = array_buffer.tobytes()
+
+    return base64.b64encode(array_buffer).decode("utf-8")
+
+
+class RealtimeEventHandler:
+    def __init__(self):
+        self.event_handlers = defaultdict(list)
+
+    def on(self, event_name, handler):
+        self.event_handlers[event_name].append(handler)
+
+    def clear_event_handlers(self):
+        self.event_handlers = defaultdict(list)
+
+    def dispatch(self, event_name, event):
+        for handler in self.event_handlers[event_name]:
+            if inspect.iscoroutinefunction(handler):
+                asyncio.create_task(handler(event))
+            else:
+                handler(event)
+
+    async def wait_for_next(self, event_name):
+        future = asyncio.Future()
+
+        def handler(event):
+            if not future.done():
+                future.set_result(event)
+
+        self.on(event_name, handler)
+        return await future
+
+
+class RealtimeAPI(RealtimeEventHandler):
+    def __init__(self, url=None, api_key=None):
+        super().__init__()
+        self.default_url = "wss://api.openai.com/v1/realtime"
+        self.url = url or self.default_url
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.ws = None
+
+    def is_connected(self):
+        return self.ws is not None
+
+    def log(self, *args):
+        logger.debug(f"[Websocket/{datetime.utcnow().isoformat()}]", *args)
+
+    async def connect(self, model="gpt-4o-realtime-preview-2024-10-01"):
+        if self.is_connected():
+            raise Exception("Already connected")
+        self.ws = await websockets.connect(
+            f"{self.url}?model={model}",
+            extra_headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "OpenAI-Beta": "realtime=v1",
+            },
+        )
+        self.log(f"Connected to {self.url}")
+        asyncio.create_task(self._receive_messages())
+
+    async def _receive_messages(self):
+        async for message in self.ws:
+            event = json.loads(message)
+            if event["type"] == "error":
+                logger.error("ERROR", event)
+            self.log("received:", event)
+            self.dispatch(f"server.{event['type']}", event)
+            self.dispatch("server.*", event)
+
+    async def send(self, event_name, data=None):
+        if not self.is_connected():
+            raise Exception("RealtimeAPI is not connected")
+        data = data or {}
+        if not isinstance(data, dict):
+            raise Exception("data must be a dictionary")
+        event = {"event_id": self._generate_id("evt_"), "type": event_name, **data}
+        self.dispatch(f"client.{event_name}", event)
+        self.dispatch("client.*", event)
+        self.log("sent:", event)
+        await self.ws.send(json.dumps(event))
+
+    def _generate_id(self, prefix):
+        return f"{prefix}{int(datetime.utcnow().timestamp() * 1000)}"
+
+    async def disconnect(self):
+        if self.ws:
+            await self.ws.close()
+            self.ws = None
+            self.log(f"Disconnected from {self.url}")
+
+
+class RealtimeConversation:
+    default_frequency = config.features.audio.sample_rate
+
+    EventProcessors = {
+        "conversation.item.created": lambda self, event: self._process_item_created(
+            event
+        ),
+        "conversation.item.truncated": lambda self, event: self._process_item_truncated(
+            event
+        ),
+        "conversation.item.deleted": lambda self, event: self._process_item_deleted(
+            event
+        ),
+        "conversation.item.input_audio_transcription.completed": lambda self,
+        event: self._process_input_audio_transcription_completed(event),
+        "input_audio_buffer.speech_started": lambda self,
+        event: self._process_speech_started(event),
+        "input_audio_buffer.speech_stopped": lambda self,
+        event,
+        input_audio_buffer: self._process_speech_stopped(event, input_audio_buffer),
+        "response.created": lambda self, event: self._process_response_created(event),
+        "response.output_item.added": lambda self,
+        event: self._process_output_item_added(event),
+        "response.output_item.done": lambda self, event: self._process_output_item_done(
+            event
+        ),
+        "response.content_part.added": lambda self,
+        event: self._process_content_part_added(event),
+        "response.audio_transcript.delta": lambda self,
+        event: self._process_audio_transcript_delta(event),
+        "response.audio.delta": lambda self, event: self._process_audio_delta(event),
+        "response.text.delta": lambda self, event: self._process_text_delta(event),
+        "response.function_call_arguments.delta": lambda self,
+        event: self._process_function_call_arguments_delta(event),
+    }
+
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.item_lookup = {}
+        self.items = []
+        self.response_lookup = {}
+        self.responses = []
+        self.queued_speech_items = {}
+        self.queued_transcript_items = {}
+        self.queued_input_audio = None
+
+    def queue_input_audio(self, input_audio):
+        self.queued_input_audio = input_audio
+
+    def process_event(self, event, *args):
+        event_processor = self.EventProcessors.get(event["type"])
+        if not event_processor:
+            raise Exception(f"Missing conversation event processor for {event['type']}")
+        return event_processor(self, event, *args)
+
+    def get_item(self, id):
+        return self.item_lookup.get(id)
+
+    def get_items(self):
+        return self.items[:]
+
+    def _process_item_created(self, event):
+        item = event["item"]
+        new_item = item.copy()
+        if new_item["id"] not in self.item_lookup:
+            self.item_lookup[new_item["id"]] = new_item
+            self.items.append(new_item)
+        new_item["formatted"] = {"audio": [], "text": "", "transcript": ""}
+        if new_item["id"] in self.queued_speech_items:
+            new_item["formatted"]["audio"] = self.queued_speech_items[new_item["id"]][
+                "audio"
+            ]
+            del self.queued_speech_items[new_item["id"]]
+        if "content" in new_item:
+            text_content = [
+                c for c in new_item["content"] if c["type"] in ["text", "input_text"]
+            ]
+            for content in text_content:
+                new_item["formatted"]["text"] += content["text"]
+        if new_item["id"] in self.queued_transcript_items:
+            new_item["formatted"]["transcript"] = self.queued_transcript_items[
+                new_item["id"]
+            ]["transcript"]
+            del self.queued_transcript_items[new_item["id"]]
+        if new_item["type"] == "message":
+            if new_item["role"] == "user":
+                new_item["status"] = "completed"
+                if self.queued_input_audio:
+                    new_item["formatted"]["audio"] = self.queued_input_audio
+                    self.queued_input_audio = None
+            else:
+                new_item["status"] = "in_progress"
+        elif new_item["type"] == "function_call":
+            new_item["formatted"]["tool"] = {
+                "type": "function",
+                "name": new_item["name"],
+                "call_id": new_item["call_id"],
+                "arguments": "",
+            }
+            new_item["status"] = "in_progress"
+        elif new_item["type"] == "function_call_output":
+            new_item["status"] = "completed"
+            new_item["formatted"]["output"] = new_item["output"]
+        return new_item, None
+
+    def _process_item_truncated(self, event):
+        item_id = event["item_id"]
+        audio_end_ms = event["audio_end_ms"]
+        item = self.item_lookup.get(item_id)
+        if not item:
+            raise Exception(f'item.truncated: Item "{item_id}" not found')
+        end_index = (audio_end_ms * self.default_frequency) // 1000
+        item["formatted"]["transcript"] = ""
+        item["formatted"]["audio"] = item["formatted"]["audio"][:end_index]
+        return item, None
+
+    def _process_item_deleted(self, event):
+        item_id = event["item_id"]
+        item = self.item_lookup.get(item_id)
+        if not item:
+            raise Exception(f'item.deleted: Item "{item_id}" not found')
+        del self.item_lookup[item["id"]]
+        self.items.remove(item)
+        return item, None
+
+    def _process_input_audio_transcription_completed(self, event):
+        item_id = event["item_id"]
+        content_index = event["content_index"]
+        transcript = event["transcript"]
+        formatted_transcript = transcript or " "
+        item = self.item_lookup.get(item_id)
+        if not item:
+            self.queued_transcript_items[item_id] = {"transcript": formatted_transcript}
+            return None, None
+        item["content"][content_index]["transcript"] = transcript
+        item["formatted"]["transcript"] = formatted_transcript
+        return item, {"transcript": transcript}
+
+    def _process_speech_started(self, event):
+        item_id = event["item_id"]
+        audio_start_ms = event["audio_start_ms"]
+        self.queued_speech_items[item_id] = {"audio_start_ms": audio_start_ms}
+        return None, None
+
+    def _process_speech_stopped(self, event, input_audio_buffer):
+        item_id = event["item_id"]
+        audio_end_ms = event["audio_end_ms"]
+        speech = self.queued_speech_items[item_id]
+        speech["audio_end_ms"] = audio_end_ms
+        if input_audio_buffer:
+            start_index = (speech["audio_start_ms"] * self.default_frequency) // 1000
+            end_index = (speech["audio_end_ms"] * self.default_frequency) // 1000
+            speech["audio"] = input_audio_buffer[start_index:end_index]
+        return None, None
+
+    def _process_response_created(self, event):
+        response = event["response"]
+        if response["id"] not in self.response_lookup:
+            self.response_lookup[response["id"]] = response
+            self.responses.append(response)
+        return None, None
+
+    def _process_output_item_added(self, event):
+        response_id = event["response_id"]
+        item = event["item"]
+        response = self.response_lookup.get(response_id)
+        if not response:
+            raise Exception(
+                f'response.output_item.added: Response "{response_id}" not found'
+            )
+        response["output"].append(item["id"])
+        return None, None
+
+    def _process_output_item_done(self, event):
+        item = event["item"]
+        if not item:
+            raise Exception('response.output_item.done: Missing "item"')
+        found_item = self.item_lookup.get(item["id"])
+        if not found_item:
+            raise Exception(f'response.output_item.done: Item "{item["id"]}" not found')
+        found_item["status"] = item["status"]
+        return found_item, None
+
+    def _process_content_part_added(self, event):
+        item_id = event["item_id"]
+        part = event["part"]
+        item = self.item_lookup.get(item_id)
+        if not item:
+            raise Exception(f'response.content_part.added: Item "{item_id}" not found')
+        item["content"].append(part)
+        return item, None
+
+    def _process_audio_transcript_delta(self, event):
+        item_id = event["item_id"]
+        content_index = event["content_index"]
+        delta = event["delta"]
+        item = self.item_lookup.get(item_id)
+        if not item:
+            raise Exception(
+                f'response.audio_transcript.delta: Item "{item_id}" not found'
+            )
+        item["content"][content_index]["transcript"] += delta
+        item["formatted"]["transcript"] += delta
+        return item, {"transcript": delta}
+
+    def _process_audio_delta(self, event):
+        item_id = event["item_id"]
+        content_index = event["content_index"]
+        delta = event["delta"]
+        item = self.item_lookup.get(item_id)
+        if not item:
+            logger.debug(f'response.audio.delta: Item "{item_id}" not found')
+            return None, None
+        array_buffer = base64_to_array_buffer(delta)
+        append_values = array_buffer.tobytes()
+        item["formatted"]["audio"] += [append_values]
+        return item, {"audio": append_values}
+
+    def _process_text_delta(self, event):
+        item_id = event["item_id"]
+        content_index = event["content_index"]
+        delta = event["delta"]
+        item = self.item_lookup.get(item_id)
+        if not item:
+            raise Exception(f'response.text.delta: Item "{item_id}" not found')
+        item["content"][content_index]["text"] += delta
+        item["formatted"]["text"] += delta
+        return item, {"text": delta}
+
+    def _process_function_call_arguments_delta(self, event):
+        item_id = event["item_id"]
+        delta = event["delta"]
+        item = self.item_lookup.get(item_id)
+        if not item:
+            raise Exception(
+                f'response.function_call_arguments.delta: Item "{item_id}" not found'
+            )
+        item["arguments"] += delta
+        item["formatted"]["tool"]["arguments"] += delta
+        return item, {"arguments": delta}
+
+
+class RealtimeClient(RealtimeEventHandler):
+    def __init__(self, url=None, api_key=None):
+        super().__init__()
+        self.default_session_config = {
+            "modalities": ["text", "audio"],
+            "instructions": "System settings:\nTool use: enabled.\n\nInstructions:\n- You are an artificial intelligence agent responsible for helping test realtime voice capabilities\n- Please make sure to respond with a helpful voice via audio\n- Be kind, helpful, and curteous\n- It is okay to ask the user questions\n- Use tools and functions you have available liberally, it is part of the training apparatus\n- Be open to exploration and conversation\n- Remember: this is just for fun and testing!\n\nPersonality:\n- Be upbeat and genuine\n- Try speaking quickly as if excited\n",
+            "voice": "shimmer",
+            "input_audio_format": "pcm16",
+            "output_audio_format": "pcm16",
+            "input_audio_transcription": {"model": "whisper-1"},
+            "turn_detection": {"type": "server_vad"},
+            "tools": [],
+            "tool_choice": "auto",
+            "temperature": 0.8,
+            "max_response_output_tokens": 4096,
+        }
+        self.session_config = {}
+        self.transcription_models = [{"model": "whisper-1"}]
+        self.default_server_vad_config = {
+            "type": "server_vad",
+            "threshold": 0.5,
+            "prefix_padding_ms": 300,
+            "silence_duration_ms": 200,
+        }
+        self.realtime = RealtimeAPI(url, api_key)
+        self.conversation = RealtimeConversation()
+        self._reset_config()
+        self._add_api_event_handlers()
+
+    def _reset_config(self):
+        self.session_created = False
+        self.tools = {}
+        self.session_config = self.default_session_config.copy()
+        self.input_audio_buffer = bytearray()
+        return True
+
+    def _add_api_event_handlers(self):
+        self.realtime.on("client.*", self._log_event)
+        self.realtime.on("server.*", self._log_event)
+        self.realtime.on("server.session.created", self._on_session_created)
+        self.realtime.on("server.response.created", self._process_event)
+        self.realtime.on("server.response.output_item.added", self._process_event)
+        self.realtime.on("server.response.content_part.added", self._process_event)
+        self.realtime.on(
+            "server.input_audio_buffer.speech_started", self._on_speech_started
+        )
+        self.realtime.on(
+            "server.input_audio_buffer.speech_stopped", self._on_speech_stopped
+        )
+        self.realtime.on("server.conversation.item.created", self._on_item_created)
+        self.realtime.on("server.conversation.item.truncated", self._process_event)
+        self.realtime.on("server.conversation.item.deleted", self._process_event)
+        self.realtime.on(
+            "server.conversation.item.input_audio_transcription.completed",
+            self._process_event,
+        )
+        self.realtime.on("server.response.audio_transcript.delta", self._process_event)
+        self.realtime.on("server.response.audio.delta", self._process_event)
+        self.realtime.on("server.response.text.delta", self._process_event)
+        self.realtime.on(
+            "server.response.function_call_arguments.delta", self._process_event
+        )
+        self.realtime.on("server.response.output_item.done", self._on_output_item_done)
+
+    def _log_event(self, event):
+        realtime_event = {
+            "time": datetime.utcnow().isoformat(),
+            "source": "client" if event["type"].startswith("client.") else "server",
+            "event": event,
+        }
+        self.dispatch("realtime.event", realtime_event)
+
+    def _on_session_created(self, event):
+        self.session_created = True
+
+    def _process_event(self, event, *args):
+        item, delta = self.conversation.process_event(event, *args)
+        if item:
+            self.dispatch("conversation.updated", {"item": item, "delta": delta})
+        return item, delta
+
+    def _on_speech_started(self, event):
+        self._process_event(event)
+        self.dispatch("conversation.interrupted", event)
+
+    def _on_speech_stopped(self, event):
+        self._process_event(event, self.input_audio_buffer)
+
+    def _on_item_created(self, event):
+        item, delta = self._process_event(event)
+        self.dispatch("conversation.item.appended", {"item": item})
+        if item and item["status"] == "completed":
+            self.dispatch("conversation.item.completed", {"item": item})
+
+    async def _on_output_item_done(self, event):
+        item, delta = self._process_event(event)
+        if item and item["status"] == "completed":
+            self.dispatch("conversation.item.completed", {"item": item})
+        if item and item.get("formatted", {}).get("tool"):
+            await self._call_tool(item["formatted"]["tool"])
+
+    async def _call_tool(self, tool):
+        try:
+            json_arguments = json.loads(tool["arguments"])
+            tool_config = self.tools.get(tool["name"])
+            if not tool_config:
+                raise Exception(f'Tool "{tool["name"]}" has not been added')
+            result = await tool_config["handler"](**json_arguments)
+            await self.realtime.send(
+                "conversation.item.create",
+                {
+                    "item": {
+                        "type": "function_call_output",
+                        "call_id": tool["call_id"],
+                        "output": json.dumps(result),
+                    }
+                },
+            )
+        except Exception as e:
+            logger.error(f"Tool call error: {json.dumps({'error': str(e)})}")
+            await self.realtime.send(
+                "conversation.item.create",
+                {
+                    "item": {
+                        "type": "function_call_output",
+                        "call_id": tool["call_id"],
+                        "output": json.dumps({"error": str(e)}),
+                    }
+                },
+            )
+        await self.create_response()
+
+    def is_connected(self):
+        return self.realtime.is_connected()
+
+    def reset(self):
+        self.disconnect()
+        self.realtime.clear_event_handlers()
+        self._reset_config()
+        self._add_api_event_handlers()
+        return True
+
+    async def connect(self):
+        if self.is_connected():
+            raise Exception("Already connected, use .disconnect() first")
+        await self.realtime.connect()
+        await self.update_session()
+        return True
+
+    async def wait_for_session_created(self):
+        if not self.is_connected():
+            raise Exception("Not connected, use .connect() first")
+        while not self.session_created:
+            await asyncio.sleep(0.001)
+        return True
+
+    async def disconnect(self):
+        self.session_created = False
+        self.conversation.clear()
+        if self.realtime.is_connected():
+            await self.realtime.disconnect()
+
+    def get_turn_detection_type(self):
+        return self.session_config.get("turn_detection", {}).get("type")
+
+    async def add_tool(self, definition, handler):
+        if not definition.get("name"):
+            raise Exception("Missing tool name in definition")
+        name = definition["name"]
+        if name in self.tools:
+            raise Exception(
+                f'Tool "{name}" already added. Please use .removeTool("{name}") before trying to add again.'
+            )
+        if not callable(handler):
+            raise Exception(f'Tool "{name}" handler must be a function')
+        self.tools[name] = {"definition": definition, "handler": handler}
+        await self.update_session()
+        return self.tools[name]
+
+    def remove_tool(self, name):
+        if name not in self.tools:
+            raise Exception(f'Tool "{name}" does not exist, can not be removed.')
+        del self.tools[name]
+        return True
+
+    async def delete_item(self, id):
+        await self.realtime.send("conversation.item.delete", {"item_id": id})
+        return True
+
+    async def update_session(self, **kwargs):
+        self.session_config.update(kwargs)
+        use_tools = [
+            {**tool_definition, "type": "function"}
+            for tool_definition in self.session_config.get("tools", [])
+        ] + [
+            {**self.tools[key]["definition"], "type": "function"} for key in self.tools
+        ]
+        session = {**self.session_config, "tools": use_tools}
+        if self.realtime.is_connected():
+            await self.realtime.send("session.update", {"session": session})
+        return True
+
+    async def create_conversation_item(self, item):
+        await self.realtime.send("conversation.item.create", {"item": item})
+
+    async def send_user_message_content(self, content=[]):
+        if content:
+            for c in content:
+                if c["type"] == "input_audio":
+                    if isinstance(c["audio"], (bytes, bytearray)):
+                        c["audio"] = array_buffer_to_base64(c["audio"])
+            await self.realtime.send(
+                "conversation.item.create",
+                {
+                    "item": {
+                        "type": "message",
+                        "role": "user",
+                        "content": content,
+                    }
+                },
+            )
+        await self.create_response()
+        return True
+
+    async def append_input_audio(self, array_buffer):
+        if len(array_buffer) > 0:
+            await self.realtime.send(
+                "input_audio_buffer.append",
+                {
+                    "audio": array_buffer_to_base64(np.array(array_buffer)),
+                },
+            )
+            self.input_audio_buffer.extend(array_buffer)
+        return True
+
+    async def create_response(self):
+        if self.get_turn_detection_type() is None and len(self.input_audio_buffer) > 0:
+            await self.realtime.send("input_audio_buffer.commit")
+            self.conversation.queue_input_audio(self.input_audio_buffer)
+            self.input_audio_buffer = bytearray()
+        await self.realtime.send("response.create")
+        return True
+
+    async def cancel_response(self, id=None, sample_count=0):
+        if not id:
+            await self.realtime.send("response.cancel")
+            return {"item": None}
+        else:
+            item = self.conversation.get_item(id)
+            if not item:
+                raise Exception(f'Could not find item "{id}"')
+            if item["type"] != "message":
+                raise Exception('Can only cancelResponse messages with type "message"')
+            if item["role"] != "assistant":
+                raise Exception(
+                    'Can only cancelResponse messages with role "assistant"'
+                )
+            await self.realtime.send("response.cancel")
+            audio_index = next(
+                (i for i, c in enumerate(item["content"]) if c["type"] == "audio"), -1
+            )
+            if audio_index == -1:
+                raise Exception("Could not find audio on item to cancel")
+            await self.realtime.send(
+                "conversation.item.truncate",
+                {
+                    "item_id": id,
+                    "content_index": audio_index,
+                    "audio_end_ms": int(
+                        (sample_count / self.conversation.default_frequency) * 1000
+                    ),
+                },
+            )
+            return {"item": item}
+
+    async def wait_for_next_item(self):
+        event = await self.wait_for_next("conversation.item.appended")
+        return {"item": event["item"]}
+
+    async def wait_for_next_completed_item(self):
+        event = await self.wait_for_next("conversation.item.completed")
+        return {"item": event["item"]}
+
+
+
+================================================
+File: realtime-assistant/realtime/tools.py
+================================================
+import yfinance as yf
+import chainlit as cl
+import plotly
+
+query_stock_price_def = {
+    "name": "query_stock_price",
+    "description": "Queries the latest stock price information for a given stock symbol.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "symbol": {
+                "type": "string",
+                "description": "The stock symbol to query (e.g., 'AAPL' for Apple Inc.)",
+            },
+            "period": {
+                "type": "string",
+                "description": "The time period for which to retrieve stock data (e.g., '1d' for one day, '1mo' for one month)",
+            },
+        },
+        "required": ["symbol", "period"],
+    },
+}
+
+
+async def query_stock_price_handler(symbol, period):
+    """
+    Queries the latest stock price information for a given stock symbol.
+    """
+    try:
+        stock = yf.Ticker(symbol)
+        hist = stock.history(period=period)
+        if hist.empty:
+            return {"error": "No data found for the given symbol."}
+        return hist.to_json()
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+query_stock_price = (query_stock_price_def, query_stock_price_handler)
+
+draw_plotly_chart_def = {
+    "name": "draw_plotly_chart",
+    "description": "Draws a Plotly chart based on the provided JSON figure and displays it with an accompanying message.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "message": {
+                "type": "string",
+                "description": "The message to display alongside the chart",
+            },
+            "plotly_json_fig": {
+                "type": "string",
+                "description": "A JSON string representing the Plotly figure to be drawn",
+            },
+        },
+        "required": ["message", "plotly_json_fig"],
+    },
+}
+
+
+async def draw_plotly_chart_handler(message: str, plotly_json_fig):
+    fig = plotly.io.from_json(plotly_json_fig)
+    elements = [cl.Plotly(name="chart", figure=fig, display="inline")]
+
+    await cl.Message(content=message, elements=elements).send()
+
+
+draw_plotly_chart = (draw_plotly_chart_def, draw_plotly_chart_handler)
+
+
+tools = [query_stock_price, draw_plotly_chart]
+
+

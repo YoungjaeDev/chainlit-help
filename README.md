@@ -30,6 +30,10 @@ to generate `codebase.txt`
 
 Go to https://gitingest.com for repo `https://github.com/chainlit/docs` with exclude `*.json` to generate `documentation.txt`
 
+#### Cookbook context
+
+Go to https://gitingest.com for repo `https://github.com/chainlit/docs` with include `map-canvas/, realtime-assistant/` to generate `cookbook.txt`
+
 ## How to contribute?
 
 Make all the changes you want to the application, then validate them in local against [Test dataset to ship RAG](https://cloud.getliteral.ai/projects/chainlit-doc-JicvnMkIcofi/datasets/a24f9233-d03e-4dc4-98c6-c5fec438f757).

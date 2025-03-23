@@ -28,6 +28,7 @@ lai_client = LiteralClient()
 prompt_path = os.path.join(os.getcwd(), "app/prompts/rag.json")
 codebase_path = os.path.join(os.getcwd(), "app/context/codebase.txt")
 documentation_path = os.path.join(os.getcwd(), "app/context/documentation.txt")
+cookbook_path = os.path.join(os.getcwd(), "app/context/cookbook.txt")
 generate_custom_element_system_prompt_path = os.path.join(
     os.getcwd(), "app/prompts/generate_custom_element_system_prompt.txt"
 )
@@ -48,6 +49,10 @@ with open(codebase_path, "r") as codebase_file:
 
 with open(documentation_path, "r") as documentation_file:
     documentation_content = documentation_file.read()
+
+
+with open(cookbook_path, "r") as cookbook_file:
+    cookbook_content = cookbook_file.read()
 
 with open(generate_custom_element_system_prompt_path, "r") as f:
     generate_custom_element_system_prompt = f.read()
@@ -97,7 +102,7 @@ async def on_chat_start():
     langchain_prompt: ChatPromptTemplate = prompt.to_langchain_chat_prompt_template()
 
     messages = langchain_prompt.format_messages(
-        documentation=documentation_content, codebase=codebase_content
+        documentation=documentation_content, codebase=codebase_content, cookbook=cookbook_content
     )
 
     cl.user_session.set("messages", messages)

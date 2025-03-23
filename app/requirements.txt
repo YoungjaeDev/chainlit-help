@@ -2,5 +2,5 @@ langchain-google-genai>=2.1.0
 langchain_anthropic>=0.3.10
 pydantic>=2.10.6
 langchain
-chainlit>=2.4.201
+chainlit>=2.4.3
 discord>=2.3.0
