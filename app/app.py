@@ -22,6 +22,8 @@ DISCORD_MAX_CHARACTERS = 2000
 # 2000 characters ≈ 400 tokens
 DISCORD_MAX_TOKENS = 400
 
+MAX_MESSAGE_COUNT = 10
+
 lai_client = LiteralClient()
 
 
@@ -98,6 +100,7 @@ async def set_starters():
 @cl.on_chat_start
 async def on_chat_start():
     client_type = cl.user_session.get("client_type")
+    cl.user_session.set("message_count", 0)
 
     langchain_prompt: ChatPromptTemplate = prompt.to_langchain_chat_prompt_template()
 
@@ -285,6 +288,13 @@ async def chainlit_agent(question, images_content):
 
 @cl.on_message
 async def main(message: cl.Message):
+    message_count = cl.user_session.get("message_count")
+
+    if message_count >= MAX_MESSAGE_COUNT:
+        return await cl.Message(content="Limit reached for this conversation.").send()
+    else:
+        cl.user_session.set("message_count", message_count + 1)
+    
     if message.command == "GenUI":
         props = await generate_custom_element(message.content)
         custom_element = cl.CustomElement(name="ChainlitArtifact", props=props)
