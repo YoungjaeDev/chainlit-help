@@ -163,7 +163,7 @@ async def generate_custom_element(query: str):
         )
 
     llm = ChatAnthropic(
-        model="claude-3-5-sonnet-latest",
+        model="claude-3-7-sonnet-latest",
         temperature=0.2,
         max_tokens=4000,
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
@@ -178,7 +178,7 @@ async def generate_custom_element(query: str):
 
     messages.append(HumanMessage(content=query))
 
-    result = await llm.ainvoke(messages)
+    result = await llm.ainvoke(messages, config={"callbacks": [cl.LangchainCallbackHandler()]})
 
     props = result.model_dump()
 
