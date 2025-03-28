@@ -115,6 +115,7 @@ async def on_chat_start():
     if client_type == "discord":
         prompt.settings["max_tokens"] = DISCORD_MAX_TOKENS
     else:
+        prompt.settings["max_tokens"] = None
         await cl.context.emitter.set_commands(commands)
 
 
