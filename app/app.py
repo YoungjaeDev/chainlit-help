@@ -167,6 +167,7 @@ async def generate_custom_element(query: str):
         temperature=0.2,
         max_tokens=4000,
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        max_retries=1
     )
 
     llm = llm.with_structured_output(CustomElement)
@@ -237,10 +238,11 @@ async def chainlit_agent(question, images_content):
 
     settings = cl.user_session.get("settings", {}) or {}
     tools = cl.user_session.get("tools", [])
-
+    
     llm = ChatGoogleGenerativeAI(
         **settings,
         timeout=None,
+        max_retries=1
     )
     if tools:
         llm = llm.bind_tools(tools)
