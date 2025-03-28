@@ -246,45 +246,54 @@ async def chainlit_agent(question, images_content):
         llm = llm.bind_tools(tools)
 
     answer_message = None
-    iteration_count = 0
+    tool_calls: list[ToolCallChunk] = []
+    
+    # Stream the response from the LLM
+    async for chunk in llm.astream(
+        messages, config={"callbacks": [cl.LangchainCallbackHandler()]}
+    ):
+        if isinstance(chunk, AIMessageChunk) and chunk.tool_call_chunks:
+            tool_calls += chunk.tool_call_chunks
+        elif chunk.content:
+            if answer_message is None:
+                answer_message = cl.Message("")
+            # Gemini Flash 2.0 tends to start code blocks on existing lines, which breaks markdown formatting
+            if "```" in chunk.content:
+                chunk.content = chunk.content.replace("```", "\n```")
+            await answer_message.stream_token(chunk.content)
 
-    while iteration_count < 2:
-        tool_calls: list[ToolCallChunk] = []
+    # Handle tool calls if there are any (limited to just one call)
+    if tool_calls:
+        ai_message, tool_messages = await handle_tools_calls(tool_calls)
+        messages.append(ai_message)
+        messages += tool_messages
+        
+        # Process the result of the tool call with the same LLM
+        answer_message = cl.Message("")
         async for chunk in llm.astream(
             messages, config={"callbacks": [cl.LangchainCallbackHandler()]}
         ):
-            if isinstance(chunk, AIMessageChunk) and chunk.tool_call_chunks:
-                tool_calls += chunk.tool_call_chunks
-            elif chunk.content:
-                if answer_message is None:
-                    answer_message = cl.Message("")
+            if chunk.content:
                 # Gemini Flash 2.0 tends to start code blocks on existing lines, which breaks markdown formatting
                 if "```" in chunk.content:
                     chunk.content = chunk.content.replace("```", "\n```")
                 await answer_message.stream_token(chunk.content)
 
-        if tool_calls:
-            ai_message, tool_messages = await handle_tools_calls(tool_calls)
-            messages.append(ai_message)
-            messages += tool_messages
-            iteration_count += 1
-        elif answer_message:
-            # Add assistant's response to the message history
-            messages.append(AIMessage(content=answer_message.content))
-            await answer_message.send()
+    # Send the final answer
+    if answer_message:
+        # Add assistant's response to the message history
+        messages.append(AIMessage(content=answer_message.content))
+        await answer_message.send()
 
-            # Handle Discord's character limit
-            if (
-                cl.user_session.get("client_type") == "discord"
-                and len(answer_message.content) > DISCORD_MAX_CHARACTERS
-            ):
-                redirect_message = cl.Message(
-                    content="Looks like you hit Discord's limit of 2000 characters. Please visit https://help.chainlit.io to get longer answers."
-                )
-                await redirect_message.send()
-
-            break
-
+        # Handle Discord's character limit
+        if (
+            cl.user_session.get("client_type") == "discord"
+            and len(answer_message.content) > DISCORD_MAX_CHARACTERS
+        ):
+            redirect_message = cl.Message(
+                content="Looks like you hit Discord's limit of 2000 characters. Please visit https://help.chainlit.io to get longer answers."
+            )
+            await redirect_message.send()
 
 @cl.on_message
 async def main(message: cl.Message):
