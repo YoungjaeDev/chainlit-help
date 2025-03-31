@@ -1,6 +1,5 @@
 Directory structure:
 └── chainlit-docs/
-    ├── README.md
     ├── advanced-features/
     │   ├── ask-user.mdx
     │   ├── chat-profiles.mdx
@@ -87,10 +86,8 @@ Directory structure:
     │   ├── theme.mdx
     │   └── translation.mdx
     ├── data-layers/
-    │   ├── dynamodb.mdx
     │   ├── official.mdx
     │   ├── overview.mdx
-    │   └── sqlalchemy.mdx
     ├── data-persistence/
     │   ├── feedback.mdx
     │   ├── history.mdx
@@ -147,45 +144,8 @@ Directory structure:
     │   └── literalai.mdx
     └── logo/
 
-================================================
-File: README.md
-================================================
-# Mintlify Starter Kit
 
-Click on `Use this template` to copy the Mintlify starter kit. The starter kit contains examples including
-
-- Guide pages
-- Navigation
-- Customizations
-- API Reference pages
-- Use of popular components
-
-### 👩‍💻 Development
-
-Install the [Mintlify CLI](https://www.npmjs.com/package/mintlify) to preview the documentation changes locally. To install, use the following command
-
-```
-npm i -g mintlify
-```
-
-Run the following command at the root of your documentation (where mint.json is)
-
-```
-mintlify dev
-```
-
-### 😎 Publishing Changes
-
-Changes will be deployed to production automatically after pushing to the default branch.
-
-You can also preview changes using PRs, which generates a preview link of the docs.
-
-#### Troubleshooting
-
-- Mintlify dev isn't running - Run `mintlify install` it'll re-install dependencies.
-- Page loads as a 404 - Make sure you are running in a folder with `mint.json`
-
-
+Files Content:
 
 ================================================
 File: advanced-features/ask-user.mdx
@@ -4866,155 +4826,6 @@ chainlit run my-app.py
 ```
 
 
-
-================================================
-File: data-layers/dynamodb.mdx
-================================================
----
-title: DynamoDB Data Layer
----
-
-This data layer also supports the `BaseStorageClient` that enables you to store your elements into AWS S3 or Azure Blob Storage.
-
-## Example
-Here is an example of setting up this data layer. First install boto3:
-```bash
-pip install boto3
-```
-
-Import the custom data layer and storage client, and set the `cl_data._data_layer` variable at the beginning of your Chainlit app.
-
-```python
-import chainlit.data as cl_data
-from chainlit.data.dynamodb import DynamoDBDataLayer
-from chainlit.data.storage_clients import S3StorageClient
-
-storage_client = S3StorageClient(bucket="<Your Bucket>")
-
-cl_data._data_layer = DynamoDBDataLayer(table_name="<Your Table>", storage_provider=storage_client)
-```
-
-## Table structure
-
-Here is the Cloudformation used to create the dynamo table:
-```json
-{
-  "AWSTemplateFormatVersion": "2010-09-09",
-  "Resources": {
-    "DynamoDBTable": {
-      "Type": "AWS::DynamoDB::Table",
-      "Properties": {
-        "TableName": "<YOUR-TABLE-NAME>",
-        "AttributeDefinitions": [
-          {
-            "AttributeName": "PK",
-            "AttributeType": "S"
-          },
-          {
-            "AttributeName": "SK",
-            "AttributeType": "S"
-          },
-          {
-            "AttributeName": "UserThreadPK",
-            "AttributeType": "S"
-          },
-          {
-            "AttributeName": "UserThreadSK",
-            "AttributeType": "S"
-          }
-        ],
-        "KeySchema": [
-          {
-            "AttributeName": "PK",
-            "KeyType": "HASH"
-          },
-          {
-            "AttributeName": "SK",
-            "KeyType": "RANGE"
-          }
-        ],
-        "GlobalSecondaryIndexes": [
-          {
-            "IndexName": "UserThread",
-            "KeySchema": [
-              {
-                "AttributeName": "UserThreadPK",
-                "KeyType": "HASH"
-              },
-              {
-                "AttributeName": "UserThreadSK",
-                "KeyType": "RANGE"
-              }
-            ],
-            "Projection": {
-              "ProjectionType": "INCLUDE",
-              "NonKeyAttributes": ["id", "name"]
-            }
-          }
-        ],
-        "BillingMode": "PAY_PER_REQUEST"
-      }
-    }
-  }
-}
-```
-
-## Logging
-
-DynamoDB data layer defines a child of chainlit logger.
-
-```python
-import logging
-from chainlit import logger
-
-logger.getChild("DynamoDB").setLevel(logging.DEBUG)
-```
-
-## Limitations
-Filtering by positive/negative feedback is not supported.
-
-The data layer methods are not async. Boto3 is not async and therefore the data layer uses non-async blocking io.
-
-## Design
-
-This implementation uses Single Table Design. There are 4 different entity types in one table identified by the prefixes in PK & SK.
-
-Here are the entity types:
-```ts
-type User = {
-    PK: "USER#{user.identifier}"
-    SK: "USER"
-    // ...PersistedUser
-}
-
-type Thread = {
-    PK: f"THREAD#{thread_id}"
-    SK: "THREAD"
-    // GSI: UserThread for querying in list_threads
-    UserThreadPK: f"USER#{user_id}"
-    UserThreadSK: f"TS#{ts}"
-    // ...ThreadDict
-}
-
-type Step = {
-    PK: f"THREAD#{threadId}"
-    SK: f"STEP#{stepId}"
-    // ...StepDict
-
-    // feedback is stored as part of step. 
-    // NOTE: feedback.value is stored as Decimal in dynamo which is not json serializable
-    feedback?: Feedback
-}
-
-type Element = {
-    "PK": f"THREAD#{threadId}"
-    "SK": f"ELEMENT#{element.id}"
-    // ...ElementDict
-}
-```
-
-
-
 ================================================
 File: data-layers/official.mdx
 ================================================
@@ -5066,22 +4877,6 @@ Choose one of the following options for your open source data layer:
         The official Chainlit data layer
     </Card>
     <Card
-        title="Community SQLAlchemy data layer"
-        icon="database"
-        color="#0285c7"
-        href="/data-layers/sqlalchemy"
-    >
-        The community SQLAlchemy data layer
-    </Card>
-    <Card
-        title="Community DynamoDB data layer"
-        icon="database"
-        color="#3afadc"
-        href="/data-layers/dynamodb"
-    >
-        The community DynamoDB data layer
-    </Card>
-    <Card
         title="Custom data layer API"
         icon="text"
         color="#ea5a0c"
@@ -5097,136 +4892,9 @@ Choose one of the following options for your open source data layer:
 When using the [official data layer](/data-layers/official), just add the `DATABASE_URL` variable to your `.env` and
 a cloud storage configuration if relevant. 
 
-## Community data layers
-
-For community data layers, you need to import the corresponding data layer in your chainlit app. 
-Here is how you would do it with `SQLAlchemyDataLayer`:
-
-```python
-import chainlit as cl
-
-from chainlit.data.sql_alchemy import SQLAlchemyDataLayer
-
-@cl.data_layer
-def get_data_layer():
-    return SQLAlchemyDataLayer(conninfo="...")
-```
-
 ## Custom data layers
 
 Follow the [reference](/api-reference/data-persistence/custom-data-layer) for an exhaustive list of the methods your custom data layer needs to implement.
-
-
-
-
-================================================
-File: data-layers/sqlalchemy.mdx
-================================================
----
-title: SQLAlchemy Data Layer
----
-
-This custom layer has been tested for PostgreSQL, however it should support more SQL databases thanks to the use of the SQL Alchemy database.
-
-This data layer also supports the `BaseStorageClient` that enables you to store your elements into Azure Blob Storage or AWS S3.
-
-Here is the SQL used to create the schema for this data layer:
-
-```sql
-CREATE TABLE users (
-    "id" UUID PRIMARY KEY,
-    "identifier" TEXT NOT NULL UNIQUE,
-    "metadata" JSONB NOT NULL,
-    "createdAt" TEXT
-);
-
-CREATE TABLE IF NOT EXISTS threads (
-    "id" UUID PRIMARY KEY,
-    "createdAt" TEXT,
-    "name" TEXT,
-    "userId" UUID,
-    "userIdentifier" TEXT,
-    "tags" TEXT[],
-    "metadata" JSONB,
-    FOREIGN KEY ("userId") REFERENCES users("id") ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS steps (
-    "id" UUID PRIMARY KEY,
-    "name" TEXT NOT NULL,
-    "type" TEXT NOT NULL,
-    "threadId" UUID NOT NULL,
-    "parentId" UUID,
-    "streaming" BOOLEAN NOT NULL,
-    "waitForAnswer" BOOLEAN,
-    "isError" BOOLEAN,
-    "metadata" JSONB,
-    "tags" TEXT[],
-    "input" TEXT,
-    "output" TEXT,
-    "createdAt" TEXT,
-    "command" TEXT,
-    "start" TEXT,
-    "end" TEXT,
-    "generation" JSONB,
-    "showInput" TEXT,
-    "language" TEXT,
-    "indent" INT,
-    FOREIGN KEY ("threadId") REFERENCES threads("id") ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS elements (
-    "id" UUID PRIMARY KEY,
-    "threadId" UUID,
-    "type" TEXT,
-    "url" TEXT,
-    "chainlitKey" TEXT,
-    "name" TEXT NOT NULL,
-    "display" TEXT,
-    "objectKey" TEXT,
-    "size" TEXT,
-    "page" INT,
-    "language" TEXT,
-    "forId" UUID,
-    "mime" TEXT,
-    "props" JSONB,
-    FOREIGN KEY ("threadId") REFERENCES threads("id") ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS feedbacks (
-    "id" UUID PRIMARY KEY,
-    "forId" UUID NOT NULL,
-    "threadId" UUID NOT NULL,
-    "value" INT NOT NULL,
-    "comment" TEXT,
-    FOREIGN KEY ("threadId") REFERENCES threads("id") ON DELETE CASCADE
-);
-```
-
-## Example
-
-Here is an example of setting up this data layer on a PostgreSQL database with an Azure storage client. First install the required dependencies:
-
-```bash
-pip install asyncpg SQLAlchemy azure-identity azure-storage-file-datalake aiohttp greenlet
-```
-
-Import the custom data layer and storage client, and indicate which data layer to use with `@cl.data_layer` at the beginning of your Chainlit app:
-
-```python
-import chainlit as cl
-from chainlit.data.sql_alchemy import SQLAlchemyDataLayer
-from chainlit.data.storage_clients import AzureStorageClient
-
-storage_client = AzureStorageClient(account_url="<your_account_url>", container="<your_container>")
-
-@cl.data_layer
-def get_data_layer():
-    return SQLAlchemyDataLayer(conninfo="<your conninfo>", storage_provider=storage_client)
-```
-
-Note that you need to add `+asyncpg` to the protocol in the `conninfo` string so that it uses the asyncpg library.
-
 
 
 ================================================
@@ -8070,71 +7738,6 @@ seamless and secure integration.
 </Note>
 
 
-================================================
-File: integrations/haystack.mdx
-================================================
----
-title: Haystack
----
-
-<Note>
-  The current Haystack integration allows you to run chainlit apps and visualise
-  intermediary steps. Only supports Haystack 1.x. We welcome contributions to
-  make it compatible with Haystack 2.0.
-</Note>
-
-Haystack is an end-to-end NLP framework that enables you to build NLP applications powered by LLMs, Transformer models, vector search and more. Whether you want to perform question answering, answer generation, semantic document search, or build tools that are capable of complex decision making and query resolution, you can use the state-of-the-art NLP models with Haystack to build end-to-end NLP applications solving your use case.
-Check out their repo: https://github.com/deepset-ai/haystack.
-
-<Frame caption="A Haystack agent run with reasoning steps">
-  <img src="/images/chainlit-haystack.png" />
-</Frame>
-## Installation
-
-```bash
-pip install farm-haystack chainlit
-```
-
-## Integration
-
-Create a new Python file named app.py with the code below.
-
-<CodeGroup>
-
-```python Code Example
-from haystack.agents.conversational import ConversationalAgent
-import chainlit as cl
-
-## Agent Code
-
-agent = ConversationalAgent(
-  prompt_node=conversational_agent_prompt_node,
-  memory=memory,
-  prompt_template=agent_prompt,
-  tools=[search_tool],
-)
-
-cl.HaystackAgentCallbackHandler(agent)
-
-@cl.on_message
-async def main(message: cl.Message):
-    response = await cl.make_async(agent.run)(message.content)
-    await cl.Message(author="Agent", content=response["answers"][0].answer).send()
-
-```
-
-</CodeGroup>
-
-This code adds the Chainlit callback handler to the Haystack callback manager.
-The callback handler is responsible for listening to the chain's intermediate steps and sending them to the UI.
-
-Then, you can run `chainlit run app.py` in your terminal to run the app and interact with your agent.
-
-## Example
-
-Check out this full example from the cookbook: https://github.com/Chainlit/cookbook/tree/main/haystack
-
-
 
 ================================================
 File: integrations/langchain.mdx
@@ -8826,11 +8429,15 @@ File: llmops/enterprise.mdx
 title: Enterprise
 ---
 
+---
+title: Enterprise
+---
+
 If your organization can't use third party cloud services for data hosting, we can provide your company with a self-hostable Literal AI docker image (under commercial license).
 
 <Note>
-  To request access you can contact us here ->
-  https://forms.gle/BX3UNBLmTF75KgZVA.
+Please fill this [form](https://docs.google.com/forms/d/e/1FAIpQLSdPVGqfuaWSC2DfunR6cY4C7kUHl0c2W7DnhzsF9bmMxrVpkg/viewform?usp=header
+) for enterprise support.
 </Note>
 
 ## Define your Literal AI Server
@@ -8856,13 +8463,7 @@ Using your own Literal AI instance, you will still need to provide a valid API k
 
 Once activated, your chats and elements will be stored on your own server.
 
-## Debug Mode
 
-You can enable the new debug mode by adding `-d` to your `chainlit run` command. You will see a debug button below each message taking you to the trace/prompt playground.
-
-<Frame caption="Debug example">
-  <img src="/images/debug.gif" />
-</Frame>
 
 
 
@@ -8930,6 +8531,13 @@ Once activated, your chats and elements will be persisted on Literal AI.
 </Step>
 </Steps>
 
+## Debug Mode
+
+You can enable the new debug mode by adding `-d` to your `chainlit run` command. You will see a debug button below each message taking you to the trace/prompt playground.
+
+<Frame caption="Debug example">
+  <img src="/images/debug.gif" />
+</Frame>
 
 ## Deactivation
 
