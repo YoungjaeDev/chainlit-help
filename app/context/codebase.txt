@@ -41,6 +41,9 @@ Directory structure:
                     ├── group.ts
                     └── message.ts
 
+
+Files Content:
+
 ================================================
 File: libs/react-client/src/context.ts
 ================================================
@@ -288,7 +291,7 @@ export const threadHistoryState = atom<ThreadHistory | undefined>({
 });
 
 export const sideViewState = atom<
-  { title: string; elements: IMessageElement[] } | undefined
+  { title: string; elements: IMessageElement[]; key?: string } | undefined
 >({
   key: 'SideView',
   default: undefined
@@ -994,27 +997,32 @@ const useChatSession = () => {
 
       socket.on('set_sidebar_title', (title: string) => {
         setSideView((prev) => {
+          if (prev?.title === title) return prev;
           return { title, elements: prev?.elements || [] };
         });
       });
 
-      socket.on('set_sidebar_elements', (elements: IMessageElement[]) => {
-        if (!elements.length) {
-          setSideView(undefined);
-        } else {
-          elements.forEach((element) => {
-            if (!element.url && element.chainlitKey) {
-              element.url = client.getElementUrl(
-                element.chainlitKey,
-                sessionId
-              );
-            }
-          });
-          setSideView((prev) => {
-            return { title: prev?.title || '', elements: elements };
-          });
+      socket.on(
+        'set_sidebar_elements',
+        ({ elements, key }: { elements: IMessageElement[]; key?: string }) => {
+          if (!elements.length) {
+            setSideView(undefined);
+          } else {
+            elements.forEach((element) => {
+              if (!element.url && element.chainlitKey) {
+                element.url = client.getElementUrl(
+                  element.chainlitKey,
+                  sessionId
+                );
+              }
+            });
+            setSideView((prev) => {
+              if (prev?.key === key) return prev;
+              return { title: prev?.title || '', elements: elements, key };
+            });
+          }
         }
-      });
+      );
 
       socket.on('element', (element: IElement) => {
         if (!element.url && element.chainlitKey) {
@@ -1844,6 +1852,7 @@ export interface IAuthConfig {
   headerAuth: boolean;
   oauthProviders: string[];
   default_theme?: 'light' | 'dark';
+  ui?: IChainlitConfig['ui'];
 }
 
 export interface IChainlitConfig {
@@ -1854,11 +1863,15 @@ export interface IChainlitConfig {
     font_family?: string;
     default_theme?: 'light' | 'dark';
     layout?: 'default' | 'wide';
+    default_sidebar_state?: 'open' | 'closed';
     cot: 'hidden' | 'tool_call' | 'full';
     github?: string;
     custom_css?: string;
     custom_js?: string;
     custom_font?: string;
+    login_page_image?: string;
+    login_page_image_filter?: string;
+    login_page_image_dark_filter?: string;
     custom_meta_image_url?: string;
     header_links?: { name: string; icon_url: string; url: string }[];
   };
@@ -1874,7 +1887,15 @@ export interface IChainlitConfig {
     user_message_autoscroll?: boolean;
     latex?: boolean;
     edit_message?: boolean;
-    mcp?: boolean;
+    mcp?: {
+      enabled?: boolean;
+      sse?: {
+        enabled?: boolean;
+      };
+      stdio?: {
+        enabled?: boolean;
+      };
+    };
   };
   debugUrl?: string;
   userEnv: string[];

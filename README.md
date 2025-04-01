@@ -32,7 +32,7 @@ Go to https://gitingest.com for repo `https://github.com/chainlit/docs` with exc
 
 #### Cookbook context
 
-Go to https://gitingest.com for repo `https://github.com/chainlit/docs` with include `map-canvas/, realtime-assistant/` to generate `cookbook.txt`
+Go to https://gitingest.com for repo `https://github.com/chainlit/cookbook` with include `map-canvas/, realtime-assistant/` to generate `cookbook.txt`
 
 ## How to contribute?
 
