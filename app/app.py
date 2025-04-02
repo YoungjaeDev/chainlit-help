@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 from literalai import LiteralClient
+from chainlit.types import ThreadDict
+
 
 load_dotenv()
 
@@ -70,6 +72,16 @@ commands = [
     },
 ]
 
+@cl.oauth_callback
+def oauth_callback(
+  provider_id: str,
+  token: str,
+  raw_user_data,
+  default_user: cl.User,
+):
+    default_user.metadata = raw_user_data
+    return default_user
+
 
 @cl.set_starters
 async def set_starters():
@@ -95,6 +107,23 @@ async def set_starters():
             icon="/public/terminal.svg",
         ),
     ]
+
+
+@cl.on_chat_resume
+async def on_chat_resume(thread: ThreadDict):    
+    langchain_prompt: ChatPromptTemplate = prompt.to_langchain_chat_prompt_template()
+
+    messages = langchain_prompt.format_messages(
+        documentation=documentation_content, codebase=codebase_content, cookbook=cookbook_content
+    )
+        
+    for s in thread["steps"]:
+        if s["type"] == "assistant_message":
+            messages.append(AIMessage(content=s["output"]))
+        elif s["type"] == "user_message":
+            messages.append(HumanMessage(content=s["output"]))
+            
+    cl.user_session.set("messages", messages)
 
 
 @cl.on_chat_start
