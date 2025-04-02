@@ -1,14 +1,18 @@
-# Welcome to Chainlit! 🚀🤖
+# Chainlit Help App
 
-Hi there, Developer! 👋 We're excited to have you on board. Chainlit is a powerful tool designed to help you prototype, debug and share applications built on top of LLMs.
+A powerful chatbot application built with Chainlit to provide assistance with Chainlit development, offering documentation, code and cookbook lookups.
 
-## Useful Links 🔗
+## Features
 
-- **Documentation:** Get started with our comprehensive [Chainlit Documentation](https://docs.chainlit.io) 📚
-- **Discord Community:** Join our friendly [Chainlit Discord](https://discord.gg/k73SQ3FyUh) to ask questions, share your projects, and connect with other developers! 💬
+- **Documentation Assistance**: Leverages RAG (Retrieval-Augmented Generation) to provide accurate answers from Chainlit's documentation, codebase, and cookbook
+- **Custom Element Generation**: Creates Chainlit custom UI elements on demand
 
-We can't wait to see what you create with Chainlit! Happy coding! 💻😊
+## Privacy Policy
 
-## Welcome screen
+For information about data handling and privacy, please refer to our [Privacy Policy](https://drive.google.com/file/d/1NLFzsXgWJki0DdiMsS2NMZ44FpWJpp1Q/view?usp=sharing).
 
-To modify the welcome screen, edit the `chainlit.md` file at the root of your project. If you do not want a welcome screen, just leave this file empty.
+## Limitations
+
+- Message count is limited to 10 messages per conversation
+- Discord responses are limited to 2000 characters
+
