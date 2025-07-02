@@ -13,7 +13,7 @@ prompt_path = os.path.join(os.getcwd(), "app/prompts/rag.json")
 @app.get("/app/{message}")
 async def read_main(message: str):
     init_http_context()
-    with open(prompt_path, "r") as f:
+    with open(prompt_path, "r", encoding="utf-8") as f:
         rag_prompt = json.load(f)
         settings = rag_prompt["settings"]
         del settings["provider"]

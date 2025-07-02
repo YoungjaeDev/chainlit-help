@@ -39,7 +39,7 @@ generate_custom_element_system_prompt_path = os.path.join(
 
 # We load the RAG prompt in Literal to track prompt iteration and
 # enable LLM replays from Literal AI.
-with open(prompt_path, "r") as f:
+with open(prompt_path, "r", encoding="utf-8") as f:
     rag_prompt = json.load(f)
     prompt = lai_client.api.get_or_create_prompt(
         name=rag_prompt["name"],
@@ -48,17 +48,17 @@ with open(prompt_path, "r") as f:
         tools=rag_prompt["tools"],
     )
 
-with open(codebase_path, "r") as codebase_file:
+with open(codebase_path, "r", encoding="utf-8") as codebase_file:
     codebase_content = codebase_file.read()
 
-with open(documentation_path, "r") as documentation_file:
+with open(documentation_path, "r", encoding="utf-8") as documentation_file:
     documentation_content = documentation_file.read()
 
 
-with open(cookbook_path, "r") as cookbook_file:
+with open(cookbook_path, "r", encoding="utf-8") as cookbook_file:
     cookbook_content = cookbook_file.read()
 
-with open(generate_custom_element_system_prompt_path, "r") as f:
+with open(generate_custom_element_system_prompt_path, "r", encoding="utf-8") as f:
     generate_custom_element_system_prompt = f.read()
 
 
@@ -82,6 +82,18 @@ def oauth_callback(
     default_user.metadata = raw_user_data
     return default_user
 
+# @cl.password_auth_callback
+# def password_auth_callback(username: str, password: str):
+#     if username == "admin" and password == "1234":
+#         return cl.User(
+#             identifier=username,
+#             metadata={
+#                 "role": "admin",
+#                 "provider": "credentials"
+#             }
+#         )
+#     else:
+#         return None
 
 @cl.set_starters
 async def set_starters():
@@ -116,6 +128,8 @@ async def on_chat_resume(thread: ThreadDict):
     messages = langchain_prompt.format_messages(
         documentation=documentation_content, codebase=codebase_content, cookbook=cookbook_content
     )
+
+    print(f"thread: {thread}")
         
     for s in thread["steps"]:
         if s["type"] == "assistant_message":
@@ -128,7 +142,7 @@ async def on_chat_resume(thread: ThreadDict):
 
 @cl.on_chat_start
 async def on_chat_start():
-    client_type = cl.user_session.get("client_type")
+    client_type = cl.user_session.get("client_type") # webapp
     cl.user_session.set("message_count", 0)
 
     langchain_prompt: ChatPromptTemplate = prompt.to_langchain_chat_prompt_template()
@@ -269,6 +283,7 @@ async def chainlit_agent(question, images_content):
     settings = cl.user_session.get("settings", {}) or {}
     tools = cl.user_session.get("tools", [])
     
+    print(f"settings: {settings}")
     llm = ChatGoogleGenerativeAI(
         **settings,
         timeout=None,
@@ -282,7 +297,7 @@ async def chainlit_agent(question, images_content):
     
     # Stream the response from the LLM
     async for chunk in llm.astream(
-        messages, config={"callbacks": [cl.LangchainCallbackHandler()]}
+        messages, # config={"callbacks": [cl.LangchainCallbackHandler()]}
     ):
         if isinstance(chunk, AIMessageChunk) and chunk.tool_call_chunks:
             tool_calls += chunk.tool_call_chunks
